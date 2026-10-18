@@ -1,108 +1,141 @@
 package glsr
 
-import "core:fmt"
 import "core:unicode"
 import "core:unicode/utf8"
 
-lexer :: proc(input: string) -> []Token {
+input: string
+input_length: int
+
+lexer :: proc(inp: string) -> []Token {
 	tokens := new([dynamic]Token)
 	current_pos: int
 
-	len := utf8.rune_count(input)
+	input = inp
+	input_length = utf8.rune_count(input)
 
-	for current_pos < len {
+	for current_pos < input_length {
 		token_start_pos := current_pos
 		lookahead := rune_at(input, current_pos)
 
 		if unicode.is_white_space(lookahead) {
 			current_pos += 1
 		} else if is_symbol(lookahead) {
-			runes := new([dynamic]rune)
-			defer delete(runes^)
-
-			r := lookahead
-			for current_pos < len && (is_symbol(r) && r != ' ') {
-				append(runes, r)
-				current_pos += 1
-				r = rune_at(input, current_pos)
-			}
-
-			symbol_array := utf8.runes_to_string(runes[:])
-
-			type: Token_Type
-
-			switch symbol_array {
-			case "+": type = .PLUS
-			case "-": type = .MINUS
-			case "*": type = .TIMES
-			case "/": type = .FLOAT_DIV
-			case "^": type = .POWER
-			case "=": type = .EQUAL
-			case "<>", "!=": type = .NOT_EQUAL
-			case ">": type = .BIGGER
-			case ">=": type = .BIGGER_EQUAL
-			case "<": type = .SMALLER
-			case "<=": type = .SMALLER_EQUAL
-			case "<-": type = .ASSIGN
-			case: fmt.panicf("LEXER: Unknown symbol array: %v", symbol_array)
-			}
-
-			append(tokens, Token{type, symbol_array, token_start_pos})
-
-			current_pos += 1
+			handle_symbols(&current_pos, tokens, token_start_pos, lookahead)
 		} else if unicode.is_digit(lookahead) {
-			has_dot_appeared: bool
-			runes := new([dynamic]rune)
-			defer delete(runes^)
-
-			r := lookahead
-			for current_pos < len && (unicode.is_digit(r) || r == '.') {
-				if !(r == '.' && has_dot_appeared) do append(runes, r)
-				if r == '.' do has_dot_appeared = true
-
-				current_pos += 1
-				r = rune_at(input, current_pos)
-			}
-
-			num_string := utf8.runes_to_string(runes[:])
-			type := Token_Type.INT_LITERAL if !has_dot_appeared else Token_Type.FLOAT_LITERAL
-			append(tokens, Token{type, num_string, token_start_pos})
+			handle_numbers(&current_pos, tokens, token_start_pos, lookahead)
 		} else if is_letter(lookahead) {
-			runes := new([dynamic]rune)
-			defer delete(runes^)
-
-			r := lookahead
-			for current_pos < len && (unicode.is_digit(r) || is_letter(r) || r == '_') {
-				append(runes, r)
-				current_pos += 1
-				r = rune_at(input, current_pos)
-			}
-
-			word := utf8.runes_to_string(runes[:])
-			type: Token_Type
-
-			switch word {
-			case "DIV": type = .DIV
-			case "MOD": type = .MOD
-			case "AND", "ΚΑΙ": type = .AND
-			case "OR", "Η": type = .OR
-			case "NOT", "ΟΧΙ": type = .NOT
-			case "TRUE", "ΑΛΗΘΗΣ": type = .TRUE
-			case "FALSE", "ΨΕΥΔΗΣ": type = .FALSE
-			case: type = .IDENTIFIER
-			}
-
-			append(tokens, Token{type, word, token_start_pos})
+			handle_words(&current_pos, tokens, token_start_pos, lookahead)
 		} else {
-			fmt.panicf("LEXER: Unknown character '%v' with unicode %U at position %v", lookahead, lookahead, current_pos)
+			error(.LEXER, current_pos, "Unknown character '%v' (%U) at position %v", 
+				lookahead, lookahead, current_pos)
 		}
 	}
 
+	append(tokens, Token{.EOF, "<EOF>", current_pos})
 	return tokens[:]
 }
 
-to_string :: proc(char: rune) -> string {
-	return utf8.runes_to_string([]rune{char})
+handle_symbols :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
+	runes := new([dynamic]rune)
+	defer delete(runes^)
+
+	type: Maybe(Token_Type)
+
+	// These can be followed by other symbols but they should not be considered
+	// part of a symbol array. E.g. (-4)*7
+	switch lookahead {
+	case '\'', '"': type = .QUOTE
+	case '(': type = .PARENTHESIS_OPEN
+	case ')': type = .PARENTHESIS_CLOSE
+	case '[': type = .BRACKET_OPEN
+	case ']': type = .BRACKET_CLOSE
+	}
+
+	if type != nil {
+		append(tokens, Token{type.?, to_string(lookahead), token_start_pos})
+		current_pos^ += 1
+		return
+	}
+
+	// Proceed to symbol arrays (e.g. <-, >=, etc.)
+
+	r := lookahead
+	for current_pos^ < input_length && (is_symbol(r) && r != ' ') {
+		append(runes, r)
+		current_pos^ += 1
+		r = rune_at(input, current_pos^)
+	}
+
+	symbol_array := utf8.runes_to_string(runes[:])
+
+	switch symbol_array {
+	case "+": type = .PLUS
+	case "-": type = .MINUS
+	case "*": type = .TIMES
+	case "/": type = .FLOAT_DIV
+	case "^": type = .POWER
+	case "=": type = .EQUAL
+	case "<>", "!=": type = .NOT_EQUAL
+	case ">": type = .BIGGER
+	case ">=": type = .BIGGER_EQUAL
+	case "<": type = .SMALLER
+	case "<=": type = .SMALLER_EQUAL
+	case "<-": type = .ASSIGN
+	case: error(.LEXER, current_pos^, "Unknown symbol array: %v", symbol_array)
+	}
+
+	append(tokens, Token{type.?, symbol_array, token_start_pos})
+}
+
+handle_numbers :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
+	has_dot_appeared: bool
+	runes := new([dynamic]rune)
+	defer delete(runes^)
+
+	r := lookahead
+	for current_pos^ < input_length && (unicode.is_digit(r) || r == '.') {
+		if r == '.' {
+			if !has_dot_appeared do has_dot_appeared = true; else do error(.LEXER, current_pos^, "Multiple dots!")
+		}
+		append(runes, r)
+
+		current_pos^ += 1
+		r = rune_at(input, current_pos^)
+	}
+
+	num_string := utf8.runes_to_string(runes[:])
+	if runes[len(runes) - 1] == '.' do error(.LEXER, current_pos^, "Number ending with dot: %s", num_string)
+	
+	type := Token_Type.INT_LITERAL if !has_dot_appeared else Token_Type.FLOAT_LITERAL
+	append(tokens, Token{type, num_string, token_start_pos})
+}
+
+handle_words :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
+	runes := new([dynamic]rune)
+	defer delete(runes^)
+
+	r := lookahead
+	for current_pos^ < input_length && (unicode.is_digit(r) || is_letter(r) || r == '_') {
+		append(runes, r)
+		current_pos^ += 1
+		r = rune_at(input, current_pos^)
+	}
+
+	word := utf8.runes_to_string(runes[:])
+	type: Token_Type
+
+	switch word {
+	case "DIV": type = .DIV
+	case "MOD": type = .MOD
+	case "AND", "ΚΑΙ": type = .AND
+	case "OR", "Η": type = .OR
+	case "NOT", "ΟΧΙ": type = .NOT
+	case "TRUE", "ΑΛΗΘΗΣ": type = .TRUE
+	case "FALSE", "ΨΕΥΔΗΣ": type = .FALSE
+	case: type = .IDENTIFIER
+	}
+
+	append(tokens, Token{type, word, token_start_pos})
 }
 
 to_number :: proc(char: rune) -> u8 {
@@ -119,6 +152,10 @@ to_number :: proc(char: rune) -> u8 {
 	case '9': return 9
 	case: return 0
 	}
+}
+
+to_string :: proc(char: rune) -> string {
+	return utf8.runes_to_string([]rune{char})
 }
 
 rune_at :: proc(s: string, i: int) -> rune {
@@ -175,6 +212,13 @@ Token_Type :: enum {
 	SMALLER,
 	SMALLER_EQUAL,
 	NOT_EQUAL,
+
+	// Doubles
+	QUOTE,
+	PARENTHESIS_OPEN,
+	PARENTHESIS_CLOSE,
+	BRACKET_OPEN,
+	BRACKET_CLOSE,
 
 	ASSIGN,
 
