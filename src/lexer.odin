@@ -6,25 +6,31 @@ import "core:unicode/utf8"
 input: string
 input_length: int
 
-lexer :: proc(inp: string) -> []Token {
-	tokens := new([dynamic]Token)
-	current_pos: int
+tokens: ^[dynamic]Token
+current_pos: int
 
+token_start_pos: int
+lookahead: rune
+
+tokenize :: proc(inp: string) -> []Token {
 	input = inp
 	input_length = utf8.rune_count(input)
 
+	tokens = new([dynamic]Token)
+	current_pos = 0
+
 	for current_pos < input_length {
-		token_start_pos := current_pos
-		lookahead := rune_at(input, current_pos)
+		token_start_pos = current_pos
+		lookahead = rune_at(current_pos)
 
 		if unicode.is_white_space(lookahead) {
 			current_pos += 1
 		} else if is_symbol(lookahead) {
-			handle_symbols(&current_pos, tokens, token_start_pos, lookahead)
+			handle_symbols()
 		} else if unicode.is_digit(lookahead) {
-			handle_numbers(&current_pos, tokens, token_start_pos, lookahead)
+			handle_numbers()
 		} else if is_letter(lookahead) {
-			handle_words(&current_pos, tokens, token_start_pos, lookahead)
+			handle_words()
 		} else {
 			error(.LEXER, current_pos, "Unknown character '%v' (%U) at position %v", 
 				lookahead, lookahead, current_pos)
@@ -35,93 +41,63 @@ lexer :: proc(inp: string) -> []Token {
 	return tokens[:]
 }
 
-handle_symbols :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
-	runes := new([dynamic]rune)
-	defer delete(runes^)
-
-	type: Maybe(Token_Type)
-
-	// These can be followed by other symbols but they should not be considered
-	// part of a symbol array. E.g. (-4)*7
+handle_symbols :: proc() {
+	type: Token_Type
+	next: Maybe(rune)
+	
 	switch lookahead {
 	case '\'', '"': type = .QUOTE
 	case '(': type = .PARENTHESIS_OPEN
 	case ')': type = .PARENTHESIS_CLOSE
 	case '[': type = .BRACKET_OPEN
 	case ']': type = .BRACKET_CLOSE
-	}
-
-	if type != nil {
-		append(tokens, Token{type.?, to_string(lookahead), token_start_pos})
-		current_pos^ += 1
-		return
-	}
-
-	// Proceed to symbol arrays (e.g. <-, >=, etc.)
-
-	r := lookahead
-	for current_pos^ < input_length && (is_symbol(r) && r != ' ') {
-		append(runes, r)
-		current_pos^ += 1
-		r = rune_at(input, current_pos^)
-	}
-
-	symbol_array := utf8.runes_to_string(runes[:])
-
-	switch symbol_array {
-	case "+": type = .PLUS
-	case "-": type = .MINUS
-	case "*": type = .TIMES
-	case "/": type = .FLOAT_DIV
-	case "^": type = .POWER
-	case "=": type = .EQUAL
-	case "<>", "!=": type = .NOT_EQUAL
-	case ">": type = .BIGGER
-	case ">=": type = .BIGGER_EQUAL
-	case "<": type = .SMALLER
-	case "<=": type = .SMALLER_EQUAL
-	case "<-": type = .ASSIGN
-	case: error(.LEXER, current_pos^, "Unknown symbol array: %v", symbol_array)
-	}
-
-	append(tokens, Token{type.?, symbol_array, token_start_pos})
-}
-
-handle_numbers :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
-	has_dot_appeared: bool
-	runes := new([dynamic]rune)
-	defer delete(runes^)
-
-	r := lookahead
-	for current_pos^ < input_length && (unicode.is_digit(r) || r == '.') {
-		if r == '.' {
-			if !has_dot_appeared do has_dot_appeared = true; else do error(.LEXER, current_pos^, "Multiple dots!")
+	case '.': type = .DOT
+	case '+': type = .PLUS
+	case '-': type = .MINUS
+	case '*': type = .TIMES
+	case '/': type = .FLOAT_DIV
+	case '^': type = .POWER
+	case '=': type = .EQUAL
+	case '<':
+		next = rune_at(current_pos + 1)
+		switch next {
+		case '>': type = .NOT_EQUAL // <>
+		case '=': type = .SMALLER_EQUAL // <=
+		case '-': type = .ASSIGN // <-
+		case: type = .SMALLER; next = nil
 		}
-		append(runes, r)
-
-		current_pos^ += 1
-		r = rune_at(input, current_pos^)
+	case '>':
+		next = rune_at(current_pos + 1)
+		switch next {
+		case '=': type = .BIGGER_EQUAL // >=
+		case: type = .BIGGER; next = nil
+		}
+	case: error(.LEXER, current_pos, "Unknown symbol: %v", lookahead)
 	}
 
-	num_string := utf8.runes_to_string(runes[:])
-	if runes[len(runes) - 1] == '.' do error(.LEXER, current_pos^, "Number ending with dot: %s", num_string)
-	
-	type := Token_Type.INT_LITERAL if !has_dot_appeared else Token_Type.FLOAT_LITERAL
-	append(tokens, Token{type, num_string, token_start_pos})
+	str := utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
+	append(tokens, Token{type, str, token_start_pos})
+	current_pos += 2 if next != nil else 1
 }
 
-handle_words :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos: int, lookahead: rune) {
-	runes := new([dynamic]rune)
-	defer delete(runes^)
-
+handle_numbers :: proc() {
 	r := lookahead
-	for current_pos^ < input_length && (unicode.is_digit(r) || is_letter(r) || r == '_') {
-		append(runes, r)
-		current_pos^ += 1
-		r = rune_at(input, current_pos^)
+	for current_pos < input_length && unicode.is_digit(r) {
+		current_pos += 1
+		r = rune_at(current_pos)
 	}
 
-	word := utf8.runes_to_string(runes[:])
+	append(tokens, Token{.NUMBER, input[token_start_pos:current_pos], token_start_pos})
+}
+
+handle_words :: proc() {	
+	r := lookahead
+	for current_pos < input_length && (unicode.is_digit(r) || is_letter(r) || r == '_') {
+		current_pos += 1
+		r = rune_at(current_pos)
+	}
+
+	word := input[token_start_pos:current_pos]
 	type: Token_Type
 
 	switch word {
@@ -138,28 +114,8 @@ handle_words :: proc(current_pos: ^int, tokens: ^[dynamic]Token, token_start_pos
 	append(tokens, Token{type, word, token_start_pos})
 }
 
-to_number :: proc(char: rune) -> u8 {
-	switch char {
-	case '0': return 0
-	case '1': return 1
-	case '2': return 2
-	case '3': return 3
-	case '4': return 4
-	case '5': return 5
-	case '6': return 6
-	case '7': return 7
-	case '8': return 8
-	case '9': return 9
-	case: return 0
-	}
-}
-
-to_string :: proc(char: rune) -> string {
-	return utf8.runes_to_string([]rune{char})
-}
-
-rune_at :: proc(s: string, i: int) -> rune {
-	return utf8.rune_at_pos(s, i)
+rune_at :: proc(i: int) -> rune {
+	return utf8.rune_at_pos(input, i)
 }
 
 is_letter :: proc(r: rune) -> bool {
@@ -182,13 +138,11 @@ Token :: struct {
 }
 
 Token_Type :: enum {
-	// Literal
-	INT_LITERAL,
-	FLOAT_LITERAL,
+	NUMBER,
+	DOT,
 
 	IDENTIFIER,
 
-	// Logical
 	AND,
 	OR,
 	NOT,
@@ -196,7 +150,6 @@ Token_Type :: enum {
 	TRUE,
 	FALSE,
 
-	// Arithmetic
 	PLUS,
 	MINUS,
 	TIMES,
@@ -205,7 +158,6 @@ Token_Type :: enum {
 	MOD,
 	POWER,
 
-	// Comparative
 	EQUAL,
 	BIGGER,
 	BIGGER_EQUAL,
@@ -213,7 +165,6 @@ Token_Type :: enum {
 	SMALLER_EQUAL,
 	NOT_EQUAL,
 
-	// Doubles
 	QUOTE,
 	PARENTHESIS_OPEN,
 	PARENTHESIS_CLOSE,

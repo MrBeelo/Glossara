@@ -6,8 +6,8 @@ import "base:runtime"
 // Απλός διερμηνευτής της ΓΛΩΣΣΑΣ.
 
 main :: proc() {
-	tokens := lexer("hellope <- (-4)*7")
-	fmt.printf("%v", tokens)
+	tokens := tokenize("hellope <- NOT >= (-4.5356)*7")
+	for token in tokens do fmt.printf("%v\n", token)
 }
 
 error :: proc(stage: enum{LEXER, PARSER}, pos: int, message: string, args: ..any, loc := #caller_location) -> ! {
