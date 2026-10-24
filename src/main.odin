@@ -1,21 +1,25 @@
 package glsr
 
 import "core:fmt"
-import "base:runtime"
+import "core:os"
+import "core:unicode/utf8"
 
 // Απλός διερμηνευτής της ΓΛΩΣΣΑΣ.
 
 main :: proc() {
-	tokens := tokenize("hellope <- NOT >= (-4.5356)*7")
-	for token in tokens do fmt.printf("%v\n", token)
+	args := os.args
+
+	if len(args) < 2 do panic("No input!")
+
+	data, err := os.read_entire_file(args[1], context.allocator)
+	if err != nil do fmt.panicf("Error with reading file \"%s\"!", args[1])
+	str := string(data)
+	
+	tokens := tokenize(str)
+	for token in tokens do fmt.printf("[%v, '%s', %d]\n", token.type, token.value, token.start_pos)
 }
 
-error :: proc(stage: enum{LEXER, PARSER}, pos: int, message: string, args: ..any, loc := #caller_location) -> ! {
-	p := context.assertion_failure_proc
-	if p == nil do p = runtime.default_assertion_failure_proc
-
-	stage_str := string(fmt.ctprintf("%v", stage))
-	format := string(fmt.ctprintf(message, ..args))
-	final := string(fmt.ctprintf("%s (pos: %d)", format, pos))
-	p(stage_str, final, loc)
+error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
+	fmt.printf("[%v] %s [pos=%v]\n", stage, fmt.ctprintf(message, ..args), char_pos )
+	panic("Interpreter encountered an error!")
 }
