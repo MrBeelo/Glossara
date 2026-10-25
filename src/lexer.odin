@@ -1,15 +1,16 @@
+#+private file
+
 package glsr
 
 import "core:unicode"
 import "core:unicode/utf8"
-import "core:fmt"
 
 input: string
 input_length: int
 
 tokens: ^[dynamic]Token
 current_pos: int
-char_pos: struct{ line: int, pos: int } = {1, 0}
+@(private) char_pos: struct{ line: int, pos: int } = {1, 0}
 
 token_start_pos: int
 lookahead: rune
@@ -27,6 +28,7 @@ advance :: proc(times := 1) {
 	}
 }
 
+@(private)
 tokenize :: proc(inp: string) -> []Token {
 	input = inp
 	input_length = utf8.rune_count(input)
@@ -39,7 +41,7 @@ tokenize :: proc(inp: string) -> []Token {
 		token_start_pos = current_pos
 		lookahead = rune_at(current_pos)
 
-		if unicode.is_white_space(lookahead) {
+		if is_ignorable(lookahead) {
 			advance()
 		} else if is_symbol(lookahead) {
 			handle_symbols()
@@ -124,13 +126,38 @@ handle_words :: proc() {
 	type: Token_Type
 
 	switch word {
+	case "ΠΡΟΓΡΑΜΜΑ": type = .PROGRAM
+	case "ΑΡΧΗ": type = .BEGIN_PROGRAM
+	case "ΤΕΛΟΣ_ΠΡΟΓΡΑΜΜΑΤΟΣ": type = .END_PROGRAM
+
+	case "ΜΕΤΑΒΛΗΤΕΣ": type = .VARIABLES
+	case "ΣΤΑΘΕΡΕΣ": type = .CONSTANTS
+	case "ΑΚΕΡΑΙΕΣ": type = .INTEGERS
+	case "ΠΡΑΓΜΑΤΙΚΕΣ": type = .FLOATS
+	case "ΧΑΡΑΚΤΗΡΕΣ": type = .STRINGS
+	case "ΛΟΓΙΚΕΣ": type = .BOOLS
+
+	case "ΓΡΑΨΕ": type = .PRINT
+	case "ΔΙΑΒΑΣΕ": type = .REPEAT
+
+	case "ΑΝ": type = .IF
+	case "ΑΛΛΙΩΣ_ΑΝ": type = .ELSE_IF
+	case "ΑΛΛΙΩΣ": type = .ELSE
+	case "ΤΕΛΟΣ_ΑΝ": type = .END_IF
+
+	case "ΟΣΟ": type = .WHILE
+	case "ΕΠΑΝΑΛΑΒΕ": type = .REPEAT
+	case "ΤΕΛΟΣ_ΕΠΑΝΑΛΗΨΗΣ": type = .END_REPEAT
+		
 	case "DIV": type = .DIV
 	case "MOD": type = .MOD
-	case "AND", "ΚΑΙ": type = .AND
-	case "OR", "Η": type = .OR
-	case "NOT", "ΟΧΙ": type = .NOT
-	case "TRUE", "ΑΛΗΘΗΣ": type = .TRUE
-	case "FALSE", "ΨΕΥΔΗΣ": type = .FALSE
+		
+	case "ΚΑΙ": type = .AND
+	case "Η": type = .OR
+	case "ΟΧΙ": type = .NOT
+		
+	case "ΑΛΗΘΗΣ": type = .TRUE
+	case "ΨΕΥΔΗΣ": type = .FALSE
 	case: type = .IDENTIFIER
 	}
 
@@ -152,7 +179,12 @@ is_symbol :: proc(r: rune) -> bool {
            ('\u003A' <= r && r <= '\u0040') ||
            ('\u005B' <= r && r <= '\u0060') ||
            ('\u007B' <= r && r <= '\u007E') ||
-           ('\u02B0' <= r && r <= '\u02EE')
+           ('\u02B0' <= r && r <= '\u02EE') ||
+           r == '\n'
+}
+
+is_ignorable :: proc(r: rune) -> bool {
+	return unicode.is_white_space(r) && r != '\n'
 }
 
 Token :: struct {
@@ -162,12 +194,33 @@ Token :: struct {
 }
 
 Token_Type :: enum {
-	NUMBER,
-	DOT,
-	COLON,
-	COMMA,
-
 	IDENTIFIER,
+
+	PROGRAM,
+	BEGIN_PROGRAM,
+	END_PROGRAM,
+	
+	VARIABLES,
+	CONSTANTS,
+	INTEGERS,
+	FLOATS,
+	STRINGS,
+	BOOLS,
+
+	PRINT,
+	READ,
+	
+	IF,
+	ELSE_IF,
+	ELSE,
+	END_IF,
+	
+	WHILE,
+	REPEAT,
+	END_REPEAT,
+
+	DIV,
+	MOD,
 
 	AND,
 	OR,
@@ -175,13 +228,17 @@ Token_Type :: enum {
 
 	TRUE,
 	FALSE,
+	
+	NUMBER,
+	
+	DOT,
+	COLON,
+	COMMA,
 
 	PLUS,
 	MINUS,
 	TIMES,
 	FLOAT_DIV,
-	DIV,
-	MOD,
 	POWER,
 
 	EQUAL,
