@@ -47,7 +47,7 @@ tokenize :: proc(inp: string) -> []Token {
 			handle_symbols()
 		} else if unicode.is_digit(lookahead) {
 			handle_numbers()
-		} else if is_letter(lookahead) {
+		} else if is_letter(lookahead) || lookahead == '_' {
 			handle_words()
 		} else {
 			error(.LEXER, "Unknown character '%v' (%U)", 
@@ -62,10 +62,10 @@ tokenize :: proc(inp: string) -> []Token {
 handle_symbols :: proc() {
 	type: Token_Type
 	next: Maybe(rune)
+	str: string
 	
 	switch lookahead {
 	case '\n': type = .NEW_LINE
-	case '\'', '"', '`', 'ʽ', 'ʼ': type = .QUOTE
 	case '(': type = .PARENTHESIS_OPEN
 	case ')': type = .PARENTHESIS_CLOSE
 	case '[': type = .BRACKET_OPEN
@@ -79,6 +79,12 @@ handle_symbols :: proc() {
 	case '/': type = .FLOAT_DIV
 	case '^': type = .POWER
 	case '=': type = .EQUAL
+	case '!': 
+		str = recurse(proc(r: rune) -> bool { return r != '\n' }, true)
+		type = .COMMENT
+	case '\'', '"', 'ʽ', 'ʼ':
+		str = recurse(proc(r: rune) -> bool { return r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' }, true)
+		type = .STRING_LITERAL
 	case '<':
 		next = rune_at(current_pos + 1)
 		switch next {
@@ -96,33 +102,18 @@ handle_symbols :: proc() {
 	case: error(.LEXER, "Unknown symbol: %v", lookahead)
 	}
 
-	str := utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
+	if str == "" do str = utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
 	append(tokens, Token{type, str, token_start_pos})
 	advance(2 if next != nil else 1)
 }
 
 handle_numbers :: proc() {
-	r := lookahead
-	for current_pos < input_length && unicode.is_digit(r) {
-		advance()
-		r = rune_at(current_pos)
-	}
-
-	str := input[utf8.rune_offset(input, token_start_pos) : utf8.rune_offset(input, current_pos)]
-	append(tokens, Token{.NUMBER, str, token_start_pos})
+	str := recurse(unicode.is_digit)
+	append(tokens, Token{.NUMBER_LITERAL, str, token_start_pos})
 }
 
 handle_words :: proc() {	
-	r := lookahead
-	for current_pos < input_length && (unicode.is_digit(r) || is_letter(r) || r == '_') {
-		advance()
-		r = rune_at(current_pos)
-	}
-
-	end_index := utf8.rune_offset(input, current_pos)
-	if end_index == -1 do end_index = len(input)
-	
-	word := input[utf8.rune_offset(input, token_start_pos):end_index]
+	word := recurse(proc(r: rune) -> bool { return unicode.is_digit(r) || is_letter(r) || r == '_' })
 	type: Token_Type
 
 	switch word {
@@ -138,7 +129,7 @@ handle_words :: proc() {
 	case "ΛΟΓΙΚΕΣ": type = .BOOLS
 
 	case "ΓΡΑΨΕ": type = .PRINT
-	case "ΔΙΑΒΑΣΕ": type = .REPEAT
+	case "ΔΙΑΒΑΣΕ": type = .READ
 
 	case "ΑΝ": type = .IF
 	case "ΑΛΛΙΩΣ_ΑΝ": type = .ELSE_IF
@@ -156,16 +147,36 @@ handle_words :: proc() {
 	case "Η": type = .OR
 	case "ΟΧΙ": type = .NOT
 		
-	case "ΑΛΗΘΗΣ": type = .TRUE
-	case "ΨΕΥΔΗΣ": type = .FALSE
+	case "ΑΛΗΘΗΣ", "ΨΕΥΔΗΣ": type = .BOOL_LITERAL
 	case: type = .IDENTIFIER
 	}
 
 	append(tokens, Token{type, word, token_start_pos})
 }
 
+// Recursively iterates over a condition, based on the current rune. When the condition is false,
+// the recursion stops and the total rune array is returned as a string.
+recurse :: proc(condition: proc(r: rune) -> bool, skip_first_rune := false) -> string {
+	if skip_first_rune do advance()
+	r := rune_at(current_pos) if skip_first_rune else lookahead
+	
+	for current_pos < input_length && condition(r) {
+		advance()
+		r = rune_at(current_pos)
+	}
+	
+	str := input[rune_pos(token_start_pos + (1 if skip_first_rune else 0)) : rune_pos(current_pos)]
+	return str
+}
+
 rune_at :: proc(i: int) -> rune {
 	return utf8.rune_at_pos(input, i)
+}
+
+rune_pos :: proc(p: int) -> int {
+	result := utf8.rune_offset(input, p)
+	if result == -1 do result = len(input)
+	return result
 }
 
 is_letter :: proc(r: rune) -> bool {
@@ -175,6 +186,7 @@ is_letter :: proc(r: rune) -> bool {
 }
 
 is_symbol :: proc(r: rune) -> bool {
+	if r == '_' do return false // Should prob be treated as an identifier
 	return ('\u0020' <= r && r <= '\u002F') ||
            ('\u003A' <= r && r <= '\u0040') ||
            ('\u005B' <= r && r <= '\u0060') ||
@@ -225,11 +237,10 @@ Token_Type :: enum {
 	AND,
 	OR,
 	NOT,
-
-	TRUE,
-	FALSE,
 	
-	NUMBER,
+	NUMBER_LITERAL,
+	STRING_LITERAL,
+	BOOL_LITERAL,
 	
 	DOT,
 	COLON,
@@ -247,6 +258,8 @@ Token_Type :: enum {
 	SMALLER,
 	SMALLER_EQUAL,
 	NOT_EQUAL,
+
+	COMMENT,
 
 	QUOTE,
 	PARENTHESIS_OPEN,

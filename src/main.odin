@@ -2,9 +2,6 @@ package glsr
 
 import "core:fmt"
 import "core:os"
-import "core:unicode/utf8"
-
-// Απλός διερμηνευτής της ΓΛΩΣΣΑΣ.
 
 main :: proc() {
 	args := os.args
@@ -20,6 +17,6 @@ main :: proc() {
 }
 
 error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
-	fmt.printf("[%v] %s [pos=%v]\n", stage, fmt.ctprintf(message, ..args), char_pos )
+	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), char_pos )
 	panic("Interpreter encountered an error!")
 }
