@@ -12,11 +12,12 @@ main :: proc() {
 	if err != nil do fmt.panicf("Error with reading file \"%s\"!", args[1])
 	str := string(data)
 	
-	tokens := tokenize(str)
-	for token in tokens do fmt.printf("[%v, '%s', %d]\n", token.type, token.value, token.start_pos)
+	lexer := new_lexer(str)
+	expr := parse_expression(lexer)
+	fmt.printf("%v\n", expr)
 }
 
 error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
-	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), char_pos )
+	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), dynamic_start_pos )
 	panic("Interpreter encountered an error!")
 }

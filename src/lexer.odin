@@ -5,61 +5,80 @@ package glsr
 import "core:unicode"
 import "core:unicode/utf8"
 
+@(private) Lexer :: ^[dynamic]Token
+
+@(private) dynamic_start_pos: struct{ line: int, pos: int } = {1, 0}
 input: string
 input_length: int
-
-tokens: ^[dynamic]Token
 current_pos: int
-@(private) char_pos: struct{ line: int, pos: int } = {1, 0}
-
 token_start_pos: int
 lookahead: rune
 
-advance :: proc(times := 1) {
-	if times < 1 do return
-	for i in 1..=times {
-		current_pos += 1
-		if lookahead == '\n' {
-			char_pos.line += 1
-			char_pos.pos = 0
-		} else {
-			char_pos.pos += 1
-		}
-	}
+@(private)
+peek_lexer :: proc(lexer: Lexer) -> Token {
+	token := lexer[len(lexer) - 1] 
+	return token
 }
 
 @(private)
-tokenize :: proc(inp: string) -> []Token {
+advance_lexer :: proc(lexer: Lexer) -> Token {
+	token := peek_lexer(lexer)
+	pop(lexer)
+	return token
+}
+
+@(private)
+new_lexer :: proc(inp: string) -> Lexer {
 	input = inp
 	input_length = utf8.rune_count(input)
 
-	tokens = new([dynamic]Token)
+	lexer := new([dynamic]Token)
 	current_pos = 0
-	char_pos = {1, 0}
+	dynamic_start_pos = {1, 0}
 
 	for current_pos < input_length {
 		token_start_pos = current_pos
 		lookahead = rune_at(current_pos)
 
 		if is_ignorable(lookahead) {
-			advance()
+			advance_tokenization()
 		} else if is_symbol(lookahead) {
-			handle_symbols()
+			handle_symbols(lexer)
 		} else if unicode.is_digit(lookahead) {
-			handle_numbers()
+			handle_numbers(lexer)
 		} else if is_letter(lookahead) || lookahead == '_' {
-			handle_words()
+			handle_words(lexer)
 		} else {
 			error(.LEXER, "Unknown character '%v' (%U)", 
 				lookahead, lookahead)
 		}
 	}
 
-	append(tokens, Token{.EOF, "<EOF>", current_pos})
-	return tokens[:]
+	append(lexer, Token{.EOF, "<EOF>", current_pos})
+
+	// Reverse the dynamic array for easier popping later on
+	temp := make([dynamic]Token, len(lexer))
+	for i := 0; i < len(lexer); i += 1 do temp[i] = lexer[len(lexer) - i - 1]
+	for i := 0; i < len(lexer); i += 1 do lexer[i] = temp[i]
+	delete(temp)
+	
+	return lexer
 }
 
-handle_symbols :: proc() {
+advance_tokenization :: proc(times := 1) {
+	if times < 1 do return
+	for i in 1..=times {
+		current_pos += 1
+		if lookahead == '\n' {
+			dynamic_start_pos.line += 1
+			dynamic_start_pos.pos = 0
+		} else {
+			dynamic_start_pos.pos += 1
+		}
+	}
+}
+
+handle_symbols :: proc(tokens: ^[dynamic]Token) {
 	type: Token_Type
 	next: Maybe(rune)
 	str: string
@@ -73,11 +92,7 @@ handle_symbols :: proc() {
 	case '.': type = .DOT
 	case ':': type = .COLON
 	case ',': type = .COMMA
-	case '+': type = .PLUS
-	case '-': type = .MINUS
-	case '*': type = .TIMES
-	case '/': type = .FLOAT_DIV
-	case '^': type = .POWER
+	case '+', '-', '*', '/', '^': type = .OPERATOR
 	case '=': type = .EQUAL
 	case '!': 
 		str = recurse(proc(r: rune) -> bool { return r != '\n' }, true)
@@ -104,15 +119,15 @@ handle_symbols :: proc() {
 
 	if str == "" do str = utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
 	append(tokens, Token{type, str, token_start_pos})
-	advance(2 if next != nil else 1)
+	advance_tokenization(2 if next != nil else 1)
 }
 
-handle_numbers :: proc() {
+handle_numbers :: proc(tokens: ^[dynamic]Token) {
 	str := recurse(unicode.is_digit)
 	append(tokens, Token{.NUMBER_LITERAL, str, token_start_pos})
 }
 
-handle_words :: proc() {	
+handle_words :: proc(tokens: ^[dynamic]Token) {	
 	word := recurse(proc(r: rune) -> bool { return unicode.is_digit(r) || is_letter(r) || r == '_' })
 	type: Token_Type
 
@@ -140,8 +155,7 @@ handle_words :: proc() {
 	case "ΕΠΑΝΑΛΑΒΕ": type = .REPEAT
 	case "ΤΕΛΟΣ_ΕΠΑΝΑΛΗΨΗΣ": type = .END_REPEAT
 		
-	case "DIV": type = .DIV
-	case "MOD": type = .MOD
+	case "DIV", "MOD": type = .OPERATOR
 		
 	case "ΚΑΙ": type = .AND
 	case "Η": type = .OR
@@ -157,11 +171,11 @@ handle_words :: proc() {
 // Recursively iterates over a condition, based on the current rune. When the condition is false,
 // the recursion stops and the total rune array is returned as a string.
 recurse :: proc(condition: proc(r: rune) -> bool, skip_first_rune := false) -> string {
-	if skip_first_rune do advance()
+	if skip_first_rune do advance_tokenization()
 	r := rune_at(current_pos) if skip_first_rune else lookahead
 	
 	for current_pos < input_length && condition(r) {
-		advance()
+		advance_tokenization()
 		r = rune_at(current_pos)
 	}
 	
@@ -231,9 +245,6 @@ Token_Type :: enum {
 	REPEAT,
 	END_REPEAT,
 
-	DIV,
-	MOD,
-
 	AND,
 	OR,
 	NOT,
@@ -246,11 +257,7 @@ Token_Type :: enum {
 	COLON,
 	COMMA,
 
-	PLUS,
-	MINUS,
-	TIMES,
-	FLOAT_DIV,
-	POWER,
+	OPERATOR,
 
 	EQUAL,
 	BIGGER,
