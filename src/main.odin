@@ -3,6 +3,8 @@ package glsr
 import "core:fmt"
 import "core:os"
 
+vars: map[string]f32
+
 main :: proc() {
 	args := os.args
 
@@ -11,10 +13,20 @@ main :: proc() {
 	data, err := os.read_entire_file(args[1], context.allocator)
 	if err != nil do fmt.panicf("Error with reading file \"%s\"!", args[1])
 	str := string(data)
+
+	vars := new(map[string]f32)
 	
 	lexer := new_lexer(str)
 	expr := parse_expression(lexer)
-	fmt.printf("%v\n", expr)
+	
+	if info := is_assignment_expr(expr); info != nil {
+		value := evaluate_expression(info.?.exp^)
+		vars[info.?.str] = value
+		fmt.printf("Saved value %v to variable %s\n", value, info.?.str)
+	} else {
+		value := evaluate_expression(expr)
+		fmt.printf("%v\n", value)
+	}
 }
 
 error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {

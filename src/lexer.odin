@@ -193,6 +193,7 @@ rune_pos :: proc(p: int) -> int {
 	return result
 }
 
+@(private)
 is_letter :: proc(r: rune) -> bool {
 	return ('\u0041' <= r && r <= '\u005A') || // Latin uppercase
            ('\u0061' <= r && r <= '\u007A') || // Latin lowercase
