@@ -4,13 +4,14 @@ import "core:math"
 import "core:unicode"
 import "core:unicode/utf8"
 import "core:strconv"
+import "core:fmt"
 
 parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 	left_hand_side: Expression
 	{
 		token := advance_lexer(lexer)
 		#partial switch token.type {
-		case .NUMBER_LITERAL, .IDENTIFIER: left_hand_side = Atom(token.value)
+		case .IDENTIFIER, .NUMBER_LITERAL, .BOOL_LITERAL, .STRING_LITERAL: left_hand_side = Atom(token.value)
 		case .PARENTHESIS_OPEN:
 			left_hand_side = parse_expression(lexer, 0)
 			next := advance_lexer(lexer)
@@ -25,7 +26,7 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 			token := peek_lexer(lexer)
 			#partial switch token.type {
 			case .EOF, .PARENTHESIS_CLOSE: break loop
-			case .OPERATOR, .ASSIGN: operator = token.value
+			case .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR, .ASSIGN: operator = token.value
 			case: error(.PARSER, "Bad token! (operator stage), got \"%v\"", token)
 			}
 		}
@@ -61,30 +62,34 @@ is_assignment_expr :: proc(expr: Expression) -> Maybe( struct{str: string, exp: 
 	unreachable()
 }
 
-evaluate_expression :: proc(expr: Expression) -> f32 {
+evaluate_expression :: proc(expr: Expression) -> Data_Type {
 	switch v in expr {
 	case Atom:
 		str := string(v)
+		
 		if unicode.is_digit(utf8.rune_at_pos(str, 0)) { 
-			result, ok := strconv.parse_f32(str)
-			if ok do return result
+			result_int, is_int := strconv.parse_int(str)
+			if is_int do return result_int
+
+			result_f32, is_float := strconv.parse_f32(str)
+			if is_float do return result_f32
+			
 			error(.PARSER, "Unexpected error while parsing number, got \"%s\"", str)
-		} else {
-			result, ok := vars[str]
-			if !ok do error(.PARSER, "Variable \"%s\" was not declared!", str)
-			return result
 		}
+
+		if str == "ΑΛΗΘΗΣ" do return true
+		if str == "ΨΕΥΔΗΣ" do return false
+
+		result, ok := vars[str]
+		if !ok do error(.PARSER, "Variable \"%s\" was not declared!", str)
+		return result
 	case ^Operation:
-		left := evaluate_expression(v.left)
-		right := evaluate_expression(v.right)
+		lhs := evaluate_expression(v.left)
+		rhs := evaluate_expression(v.right)
 		switch v.operator {
-		case "+": return left + right
-		case "-": return left - right
-		case "*": return left * right
-		case "/": return left / right
-		case "DIV": error(.PARSER, "DIV not added yet, we're only working with floats!")
-		case "MOD": error(.PARSER, "MOD not added yet, we're only working with floats!")
-		case "^": return math.pow(left, right)
+		case "+", "-", "*", "/", "DIV", "MOD", "^": return numeric_operation(lhs, rhs, v.operator)
+		case "ΚΑΙ", "Η": return logical_operation(lhs, rhs, v.operator)
+		case "<", "<=", ">", ">=", "=", "<>": return comparative_operation(lhs, rhs, v.operator)
 		case: error(.PARSER, "Bad operator: %s", v.operator)
 		}
 	}
@@ -104,6 +109,87 @@ Expression :: union {
 	^Operation,
 }
 
+type_of_dt :: proc(dt: Data_Type) -> typeid {
+	switch v in dt {
+	case int: return int
+	case f32: return f32
+	case bool: return bool
+	case string: return string 
+	}
+	return nil
+}
+
+numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
+	if type_of_dt(lhs) == bool || type_of_dt(rhs) == bool do error(.PARSER, "Cannot operate numerically on bools!")
+	if type_of_dt(lhs) == string || type_of_dt(rhs) == string do error(.PARSER, "Cannot operate numerically on strings!")
+
+	lhs_is_int, rhs_is_int := type_of_dt(lhs) == int, type_of_dt(rhs) == int
+	
+	if lhs_is_int && rhs_is_int do switch op {
+	case "+": return lhs.(int) + rhs.(int)
+	case "-": return lhs.(int) - rhs.(int)
+	case "*": return lhs.(int) * rhs.(int)
+	case "/": return f32(lhs.(int)) / f32(rhs.(int))
+	case "DIV": return lhs.(int) %% rhs.(int)
+	case "MOD": return lhs.(int) % rhs.(int)
+	case "^":
+		result := math.pow(f32(lhs.(int)), f32(rhs.(int)))
+		if f32(int(result)) == result do return int(result)
+		return result
+	}
+
+	lhs_float := f32(lhs.(int)) if lhs_is_int else lhs.(f32)
+	rhs_float := f32(rhs.(int)) if rhs_is_int else rhs.(f32)
+
+	switch op {
+	case "+": return lhs_float + rhs_float
+	case "-": return lhs_float - rhs_float
+	case "*": return lhs_float * rhs_float
+	case "/": return lhs_float / rhs_float
+	case "DIV": error(.PARSER, "Cannot perform DIV on floats!")
+	case "MOD": error(.PARSER, "Cannot perform MOD on floats!")
+	case "^": return math.pow(lhs_float, rhs_float)
+	}
+	
+	unreachable()
+}
+
+comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
+	if type_of_dt(lhs) == bool || type_of_dt(rhs) == bool do error(.PARSER, "Cannot operate comparatively on bools!")
+	if type_of_dt(lhs) == string && type_of_dt(rhs) != string do error(.PARSER, "Cannot operate comparatively on different types!")
+	if type_of_dt(lhs) != string && type_of_dt(rhs) == string do error(.PARSER, "Cannot operate comparatively on different types!")
+	
+	if type_of_dt(lhs) == string && type_of_dt(rhs) == string {
+		// TODO: String comparison stuff goes here!
+		return true
+	}
+
+	lhs_float := f32(lhs.(int)) if type_of_dt(lhs) == int else lhs.(f32)
+	rhs_float := f32(rhs.(int)) if type_of_dt(rhs) == int else rhs.(f32)
+
+	switch op {
+	case "<": return lhs_float < rhs_float
+	case "<=": return lhs_float <= rhs_float
+	case ">": return lhs_float > rhs_float
+	case ">=": return lhs_float >= rhs_float
+	case "=": return lhs_float == rhs_float
+	case "<>": return lhs_float != rhs_float
+	}
+
+	unreachable()
+}
+
+logical_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
+	if type_of_dt(lhs) != bool || type_of_dt(rhs) != bool do error(.PARSER, "Cannot operate logically on non-bools!")
+
+	switch op {
+	case "ΚΑΙ": return lhs.(bool) && rhs.(bool)
+	case "Η": return lhs.(bool) || rhs.(bool)
+	}
+
+	unreachable()
+}
+
 is_valid_identifier_name :: proc(name: string) -> bool {
 	if len(name) == 0 do return false
 	for char, index in name {
@@ -118,9 +204,15 @@ is_valid_identifier_name :: proc(name: string) -> bool {
 binding_power :: proc(operator: string) -> (f32, f32) {
 	switch operator {
 	case "<-": return 0.2, 0.1
-	case "+", "-": return 1, 1.1
-	case "*", "/", "DIV", "MOD": return 2, 2.1
-	case "^": return 3.1, 3
+		
+	case "Η": return 10, 10.1
+	case "ΚΑΙ": return 11, 11.1
+
+	case "<", "<=", ">", ">=", "=", "<>": return 20, 20.1
+		
+	case "+", "-": return 30, 30.1
+	case "*", "/", "DIV", "MOD": return 31, 31.1
+	case "^": return 32.1, 32
 	}
 
 	error(.PARSER, "Expected operand!")

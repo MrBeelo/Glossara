@@ -3,7 +3,7 @@ package glsr
 import "core:fmt"
 import "core:os"
 
-vars: map[string]f32
+vars: map[string]Data_Type
 
 main :: proc() {
 	args := os.args
@@ -14,7 +14,7 @@ main :: proc() {
 	if err != nil do fmt.panicf("Error with reading file \"%s\"!", args[1])
 	str := string(data)
 
-	vars := new(map[string]f32)
+	vars := new(map[string]Data_Type)
 	
 	lexer := new_lexer(str)
 	expr := parse_expression(lexer)
@@ -22,7 +22,7 @@ main :: proc() {
 	if info := is_assignment_expr(expr); info != nil {
 		value := evaluate_expression(info.?.exp^)
 		vars[info.?.str] = value
-		fmt.printf("Saved value %v to variable %s\n", value, info.?.str)
+		fmt.printf("Saved value %v to variable %s with type %v\n", value, info.?.str, type_of_dt(value))
 	} else {
 		value := evaluate_expression(expr)
 		fmt.printf("%v\n", value)
@@ -32,4 +32,11 @@ main :: proc() {
 error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
 	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), dynamic_start_pos )
 	panic("Interpreter encountered an error!")
+}
+
+Data_Type :: union {
+	int,
+	f32,
+	string,
+	bool,
 }

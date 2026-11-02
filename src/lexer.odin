@@ -92,8 +92,8 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 	case '.': type = .DOT
 	case ':': type = .COLON
 	case ',': type = .COMMA
-	case '+', '-', '*', '/', '^': type = .OPERATOR
-	case '=': type = .EQUAL
+	case '+', '-', '*', '/', '^': type = .NUMERICAL_OPERATOR
+	case '=': type = .COMPARATIVE_OPERATOR
 	case '!': 
 		str = recurse(proc(r: rune) -> bool { return r != '\n' }, true)
 		type = .COMMENT
@@ -102,18 +102,14 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		type = .STRING_LITERAL
 	case '<':
 		next = rune_at(current_pos + 1)
-		switch next {
-		case '>': type = .NOT_EQUAL // <>
-		case '=': type = .SMALLER_EQUAL // <=
-		case '-': type = .ASSIGN // <-
-		case: type = .SMALLER; next = nil
+		if next == '-' do type = .ASSIGN; else {
+			type = .COMPARATIVE_OPERATOR
+			if next != '>' && next != '=' do next = nil
 		}
 	case '>':
 		next = rune_at(current_pos + 1)
-		switch next {
-		case '=': type = .BIGGER_EQUAL // >=
-		case: type = .BIGGER; next = nil
-		}
+		type = .COMPARATIVE_OPERATOR
+		if next != '=' do next = nil
 	case: error(.LEXER, "Unknown symbol: %v", lookahead)
 	}
 
@@ -155,10 +151,9 @@ handle_words :: proc(tokens: ^[dynamic]Token) {
 	case "ΕΠΑΝΑΛΑΒΕ": type = .REPEAT
 	case "ΤΕΛΟΣ_ΕΠΑΝΑΛΗΨΗΣ": type = .END_REPEAT
 		
-	case "DIV", "MOD": type = .OPERATOR
+	case "DIV", "MOD": type = .NUMERICAL_OPERATOR
 		
-	case "ΚΑΙ": type = .AND
-	case "Η": type = .OR
+	case "ΚΑΙ", "Η": type = .LOGICAL_OPERATOR
 	case "ΟΧΙ": type = .NOT
 		
 	case "ΑΛΗΘΗΣ", "ΨΕΥΔΗΣ": type = .BOOL_LITERAL
@@ -246,8 +241,6 @@ Token_Type :: enum {
 	REPEAT,
 	END_REPEAT,
 
-	AND,
-	OR,
 	NOT,
 	
 	NUMBER_LITERAL,
@@ -258,14 +251,9 @@ Token_Type :: enum {
 	COLON,
 	COMMA,
 
-	OPERATOR,
-
-	EQUAL,
-	BIGGER,
-	BIGGER_EQUAL,
-	SMALLER,
-	SMALLER_EQUAL,
-	NOT_EQUAL,
+	NUMERICAL_OPERATOR,
+	LOGICAL_OPERATOR,
+	COMPARATIVE_OPERATOR,
 
 	COMMENT,
 
