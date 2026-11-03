@@ -29,14 +29,7 @@ main :: proc() {
 	}
 }
 
-error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
-	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), dynamic_start_pos )
-	panic("Interpreter encountered an error!")
-}
-
-Data_Type :: union {
-	int,
-	f32,
-	string,
-	bool,
-}
+// error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
+// 	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), dynamic_start_pos )
+// 	panic("Interpreter encountered an error!")
+// }

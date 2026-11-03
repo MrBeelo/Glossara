@@ -4,10 +4,12 @@ package glsr
 
 import "core:unicode"
 import "core:unicode/utf8"
+import "core:strings"
+import "core:fmt"
 
 @(private) Lexer :: ^[dynamic]Token
 
-@(private) dynamic_start_pos: struct{ line: int, pos: int } = {1, 0}
+dynamic_start_pos: struct{ line: int, pos: int } = {1, 0}
 input: string
 input_length: int
 current_pos: int
@@ -49,7 +51,7 @@ new_lexer :: proc(inp: string) -> Lexer {
 		} else if is_letter(lookahead) || lookahead == '_' {
 			handle_words(lexer)
 		} else {
-			error(.LEXER, "Unknown character '%v' (%U)", 
+			error("Unknown character '%v' (%U)", 
 				lookahead, lookahead)
 		}
 	}
@@ -99,6 +101,7 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		type = .COMMENT
 	case '\'', '"', 'ʽ', 'ʼ':
 		str = recurse(proc(r: rune) -> bool { return r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' }, true)
+		str = strings.concatenate({"\"", str}) // We do this to differentiate strings from variables when interpreting.
 		type = .STRING_LITERAL
 	case '<':
 		next = rune_at(current_pos + 1)
@@ -110,11 +113,11 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		next = rune_at(current_pos + 1)
 		type = .COMPARATIVE_OPERATOR
 		if next != '=' do next = nil
-	case: error(.LEXER, "Unknown symbol: %v", lookahead)
+	case: error("Unknown symbol: %v", lookahead)
 	}
 
 	if str == "" do str = utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
-	append(tokens, Token{type, str, token_start_pos})
+	if type != .COMMENT do append(tokens, Token{type, str, token_start_pos})
 	advance_tokenization(2 if next != nil else 1)
 }
 
@@ -268,4 +271,9 @@ Token_Type :: enum {
 	NEW_LINE,
 
 	EOF,
+}
+
+error :: proc(message: string, args: ..any) -> ! {
+	fmt.printf("[LEXER] %s [%v]\n", fmt.ctprintf(message, ..args), dynamic_start_pos )
+	panic("Interpreter encountered an error!")
 }
