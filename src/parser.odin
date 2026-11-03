@@ -13,6 +13,12 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 			left_hand_side = parse_expression(lexer, 0)
 			next := advance_lexer(lexer)
 			if next.type != .PARENTHESIS_CLOSE do error("No closing parenthesis found!")
+		case .NOT, .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR:
+			if token.value != "ΟΧΙ" && token.value != "-" && token.value != "+" do error("Cannot perform unary operation with operator: '%s'", token.value)
+			rhs := parse_expression(lexer, 100)	
+            operation := new(Unary_Operation)
+            operation^ = Unary_Operation{token.value, rhs}
+            left_hand_side = operation
 		case: error("Bad token! (lhs stage), got \"%v\"", token)
 		}
 	}
@@ -36,8 +42,8 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 		right_hand_side: Expression
 		right_hand_side = parse_expression(lexer, right_bind_power)
 
-		operation := new(Operation)
-		operation^ = Operation{operator, left_hand_side, right_hand_side}
+		operation := new(Binary_Operation)
+		operation^ = Binary_Operation{operator, left_hand_side, right_hand_side}
 		left_hand_side = operation
 	}
 	
@@ -46,12 +52,12 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 
 is_assignment_expr :: proc(expr: Expression) -> Maybe( struct{str: string, exp: ^Expression} ) {
 	switch v in expr {
-	case Atom: return nil
-	case ^Operation:
-		if expr.(^Operation).operator == "<-" {
-			name := cast(string)expr.(^Operation).left.(Atom)
+	case Atom, ^Unary_Operation: return nil
+	case ^Binary_Operation:
+		if expr.(^Binary_Operation).operator == "<-" {
+			name := cast(string)expr.(^Binary_Operation).left.(Atom)
 			if !is_valid_identifier_name(name) do error("Invalid identifier name: %s", name)
-			result: struct{str: string, exp: ^Expression} = { name, &expr.(^Operation).right }
+			result: struct{str: string, exp: ^Expression} = { name, &expr.(^Binary_Operation).right }
 			return result
 		}
 		return nil
@@ -89,15 +95,21 @@ binding_power :: proc(operator: string) -> (f32, f32) {
 
 Atom :: distinct string
 
-Operation :: struct {
+Binary_Operation :: struct {
 	operator: string,
 	left: Expression,
 	right: Expression,
 }
 
+Unary_Operation :: struct {
+	operator: string,
+	value: Expression,
+}
+
 Expression :: union {
 	Atom,
-	^Operation,
+	^Unary_Operation,
+	^Binary_Operation,
 }
 
 @(private = "file")

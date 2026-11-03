@@ -33,7 +33,21 @@ evaluate_expression :: proc(expr: Expression) -> Data_Type {
 		result, ok := vars[str]
 		if !ok do error("Variable \"%s\" was not declared!", str)
 		return result
-	case ^Operation:
+	case ^Unary_Operation:
+		value := evaluate_expression(v.value)
+		switch v.operator {
+		case "ΟΧΙ":
+			if type_of_dt(value) != bool do error("Cannot perform NOT on a non-boolean!")
+			return !value.(bool)
+		case "-":
+			if type_of_dt(value) == int do return -value.(int)
+			if type_of_dt(value) == f32 do return -value.(f32)
+			error("Cannot negate a non-number!")
+		case "+":
+			if type_of_dt(value) == int || type_of_dt(value) == f32 do return value
+			error("Defining a non-number as positive doesn't make sense!")
+		}
+	case ^Binary_Operation:
 		lhs := evaluate_expression(v.left)
 		rhs := evaluate_expression(v.right)
 		switch v.operator {

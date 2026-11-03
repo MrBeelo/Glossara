@@ -1,4 +1,7 @@
 Απλός διερμηνευτής της ΓΛΩΣΣΑΣ (για να μάθω να φτιάχνω διερμηνευτές λολ)
 
 Todo: 
-- add operator-rhs expressions (e.g. ΟΧΙ ΑΛΗΘΗΣ)
+- Multi line support
+- Starting with declarative keywords (e.g. ΠΡΟΓΡΑΜΜΑ)
+- Lists/Arrays!
+- control flow: if, while, for, etc
