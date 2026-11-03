@@ -28,8 +28,3 @@ main :: proc() {
 		fmt.printf("%v\n", value)
 	}
 }
-
-// error :: proc(stage: enum{LEXER, PARSER}, message: string, args: ..any) -> ! {
-// 	fmt.printf("[%v] %s [%v]\n", stage, fmt.ctprintf(message, ..args), dynamic_start_pos )
-// 	panic("Interpreter encountered an error!")
-// }

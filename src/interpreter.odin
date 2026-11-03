@@ -81,10 +81,11 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	unreachable()
 }
 
-comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
+xor :: proc(a, b: bool) -> bool { return (a && !b) || (b && !a) }
+
+comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {	
 	if type_of_dt(lhs) == bool || type_of_dt(rhs) == bool do error("Cannot operate comparatively on bools!")
-	if type_of_dt(lhs) == string && type_of_dt(rhs) != string do error("Cannot operate comparatively on different types!")
-	if type_of_dt(lhs) != string && type_of_dt(rhs) == string do error("Cannot operate comparatively on different types!")
+	if xor(type_of_dt(lhs) == string, type_of_dt(rhs) == string) do error("Cannot operate comparatively on different types!")
 	
 	if type_of_dt(lhs) == string && type_of_dt(rhs) == string {
 		llen, rlen := len(lhs.(string)), len(rhs.(string))
@@ -108,8 +109,6 @@ comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 		case "=": return left_index == right_index
 		case "<>": return left_index != right_index
 		}
-
-		unreachable()
 	}
 
 	lhs_float := f32(lhs.(int)) if type_of_dt(lhs) == int else lhs.(f32)

@@ -91,7 +91,6 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 	case ')': type = .PARENTHESIS_CLOSE
 	case '[': type = .BRACKET_OPEN
 	case ']': type = .BRACKET_CLOSE
-	case '.': type = .DOT
 	case ':': type = .COLON
 	case ',': type = .COMMA
 	case '+', '-', '*', '/', '^': type = .NUMERICAL_OPERATOR
@@ -101,6 +100,7 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		type = .COMMENT
 	case '\'', '"', 'ʽ', 'ʼ':
 		str = recurse(proc(r: rune) -> bool { return r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' }, true)
+		if r := rune_at(current_pos); r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' do error("No ending quote!")
 		str = strings.concatenate({"\"", str}) // We do this to differentiate strings from variables when interpreting.
 		type = .STRING_LITERAL
 	case '<':
@@ -122,7 +122,20 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 }
 
 handle_numbers :: proc(tokens: ^[dynamic]Token) {
-	str := recurse(unicode.is_digit)
+	is_float: bool
+	r := lookahead
+	
+	for current_pos < input_length && unicode.is_digit(r) || r == '.' {
+		advance_tokenization()
+		r = rune_at(current_pos)
+
+		if r == '.' {
+			is_float = !is_float
+			if !is_float do error("Multiple dots!")
+		}
+	}
+	
+	str := input[rune_pos(token_start_pos) : rune_pos(current_pos)]
 	append(tokens, Token{.NUMBER_LITERAL, str, token_start_pos})
 }
 
@@ -250,7 +263,6 @@ Token_Type :: enum {
 	STRING_LITERAL,
 	BOOL_LITERAL,
 	
-	DOT,
 	COLON,
 	COMMA,
 
