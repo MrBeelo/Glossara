@@ -7,7 +7,7 @@ import "core:unicode/utf8"
 import "core:strings"
 import "core:fmt"
 
-@(private) Lexer :: ^[dynamic]Token
+@(private) Lexer :: [dynamic]Token
 
 dynamic_start_pos: struct{ line: int, pos: int } = {1, 0}
 input: string
@@ -17,13 +17,13 @@ token_start_pos: int
 lookahead: rune
 
 @(private)
-peek_lexer :: proc(lexer: Lexer) -> Token {
+peek_lexer :: proc(lexer: ^Lexer) -> Token {
 	token := lexer[len(lexer) - 1] 
 	return token
 }
 
 @(private)
-advance_lexer :: proc(lexer: Lexer) -> Token {
+advance_lexer :: proc(lexer: ^Lexer) -> Token {
 	token := peek_lexer(lexer)
 	pop(lexer)
 	return token
@@ -56,15 +56,18 @@ new_lexer :: proc(inp: string) -> Lexer {
 		}
 	}
 
-	append(lexer, Token{.EOF, "<EOF>", current_pos})
+	append(lexer, Token{.EOL, "<EOL>", current_pos})
 
-	// Reverse the dynamic array for easier popping later on
-	temp := make([dynamic]Token, len(lexer))
-	for i := 0; i < len(lexer); i += 1 do temp[i] = lexer[len(lexer) - i - 1]
-	for i := 0; i < len(lexer); i += 1 do lexer[i] = temp[i]
-	delete(temp)
-	
-	return lexer
+	reverse(lexer)
+
+	return lexer^
+}
+
+@(private)
+print_lexer :: proc(lexer: Lexer) {
+	for token in lexer {
+		fmt.printf("[%v, %s, %d]\n", token.type, token.value, token.start_pos)
+	}
 }
 
 advance_tokenization :: proc(times := 1) {
@@ -225,7 +228,7 @@ is_ignorable :: proc(r: rune) -> bool {
 	return unicode.is_white_space(r) && r != '\n'
 }
 
-Token :: struct {
+@(private) Token :: struct {
 	type: Token_Type,
 	value: string,
 	start_pos: int,
@@ -253,7 +256,7 @@ Token_Type :: enum {
 	PARENTHESIS_OPEN,
 	PARENTHESIS_CLOSE,
 
-	EOF,
+	EOL,
 
 	// NOT DONE ZONE:
 

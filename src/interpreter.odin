@@ -10,6 +10,21 @@ import "core:strings"
 import "core:fmt"
 
 @(private)
+run_program :: proc(program: Program) {
+	for line in program {
+		expr := line.(Expression)
+		if info := is_assignment_expr(expr); info != nil {
+			value := evaluate_expression(info.?.exp^)
+			vars[info.?.str] = value
+			fmt.printf("Saved value %v to variable %s with type %v\n", value, info.?.str, type_of_dt(value))
+		} else {
+			value := evaluate_expression(expr)
+			fmt.printf("%v\n", value)
+		}
+	}
+}
+
+@(private)
 evaluate_expression :: proc(expr: Expression) -> Data_Type {
 	switch v in expr {
 	case Atom:

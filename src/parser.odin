@@ -3,7 +3,7 @@ package glsr
 import "core:unicode"
 import "core:fmt"
 
-parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
+parse_expression :: proc(lexer: ^Lexer, min_bind_power: f32 = -1) -> Expression {
 	left_hand_side: Expression
 	{
 		token := advance_lexer(lexer)
@@ -28,7 +28,7 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 		{
 			token := peek_lexer(lexer)
 			#partial switch token.type {
-			case .EOF, .PARENTHESIS_CLOSE: break loop
+			case .EOL, .PARENTHESIS_CLOSE: break loop
 			case .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR, .ASSIGN: operator = token.value
 			case: error("Bad token! (operator stage), got \"%v\"", token)
 			}
@@ -48,6 +48,40 @@ parse_expression :: proc(lexer: Lexer, min_bind_power: f32 = -1) -> Expression {
 	}
 	
 	return left_hand_side
+}
+
+@(private = "file")
+append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
+	if len(current_line) == 0 do return
+	line_tokens := make([dynamic]Token)
+	if current_line[0].type != .EOL do append(&line_tokens, Token{.EOL, "<EOL>", current_line[0].start_pos + 1})
+    append(&line_tokens, ..current_line[:])
+	append(lines, line_tokens)
+}
+
+parse_program :: proc(lexer: Lexer) -> Program {
+	result := make(Program)
+	current_line := make(Lexer)
+	lines := make([dynamic]Lexer)
+	
+	for token in lexer {
+		if token.type != .NEW_LINE { append(&current_line, token); continue }
+		append_line(&lines, &current_line)
+		clear(&current_line)
+	}
+
+	append_line(&lines, &current_line)
+	reverse(&lines)
+	
+	for &line in lines {
+		append(&result, parse_expression(&line))
+		delete(line)
+	}
+
+	delete(current_line)
+	delete(lines)
+
+	return result
 }
 
 is_assignment_expr :: proc(expr: Expression) -> Maybe( struct{str: string, exp: ^Expression} ) {
@@ -111,6 +145,12 @@ Expression :: union {
 	^Unary_Operation,
 	^Binary_Operation,
 }
+
+Line :: union {
+	Expression,
+}
+
+Program :: [dynamic]Line
 
 @(private = "file")
 error :: proc(message: string, args: ..any) -> ! {

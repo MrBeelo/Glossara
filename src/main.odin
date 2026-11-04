@@ -17,14 +17,6 @@ main :: proc() {
 	vars := new(map[string]Data_Type)
 	
 	lexer := new_lexer(str)
-	expr := parse_expression(lexer)
-	
-	if info := is_assignment_expr(expr); info != nil {
-		value := evaluate_expression(info.?.exp^)
-		vars[info.?.str] = value
-		fmt.printf("Saved value %v to variable %s with type %v\n", value, info.?.str, type_of_dt(value))
-	} else {
-		value := evaluate_expression(expr)
-		fmt.printf("%v\n", value)
-	}
+	program := parse_program(lexer)
+	run_program(program)
 }
