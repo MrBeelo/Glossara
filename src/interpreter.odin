@@ -11,15 +11,22 @@ import "core:fmt"
 
 @(private)
 run_program :: proc(program: Program) {
-	for line in program {
+	for line in program do switch v in line {
+	case Expression:
 		expr := line.(Expression)
 		if info := is_assignment_expr(expr); info != nil {
 			value := evaluate_expression(info.?.exp^)
 			vars[info.?.str] = value
-			fmt.printf("Saved value %v to variable %s with type %v\n", value, info.?.str, type_of_dt(value))
 		} else {
-			value := evaluate_expression(expr)
-			fmt.printf("%v\n", value)
+			error("Unhandled expression!")
+		}
+	case Statement:
+		stmt := line.(Statement)
+		#partial switch x in stmt {
+		case Print_Statement: {
+			#reverse for expr in x.expr do fmt.printf("%v", evaluate_expression(expr))
+			fmt.printf("\n")
+		}
 		}
 	}
 }

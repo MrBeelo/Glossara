@@ -17,6 +17,6 @@ main :: proc() {
 	vars := new(map[string]Data_Type)
 	
 	lexer := new_lexer(str)
-	program := parse_program(lexer)
+	program := parse_program(lexer)	
 	run_program(program)
 }

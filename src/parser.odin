@@ -59,6 +59,51 @@ append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
 	append(lines, line_tokens)
 }
 
+parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
+	if len(input_lexer) == 0 do error("Nothing to parse!")
+	
+	lexer := make([dynamic]Token)
+	defer delete(lexer)
+	
+	for token in input_lexer do append(&lexer, token)
+	pop_front(&lexer)
+	
+	#partial switch lexer[len(lexer) - 1].type {
+	case .PROGRAM:
+		if len(lexer) == 1 do error("Missing program name!")
+		if len(lexer) == 3 do error("Too many program names!")
+		name := lexer[0].value
+		if !is_valid_identifier_name(name) do error("Not a valid program name!")
+		return Program_Statement{.DECLARATION, name}
+	case .BEGIN_PROGRAM: return Program_Statement{.START, "START"}
+	case .END_PROGRAM: return Program_Statement{.FINISH, "FINISH"}
+	case .PRINT:
+		token_count := len(lexer) - 1
+		if token_count == 0 do error("Nothing to print!")
+
+		result := make([dynamic]Expression)
+		current_expr := make([dynamic]Token)
+		append(&current_expr, Token{.EOL, "<EOL>", 999})
+		for i := 0; i < token_count; i += 1 {
+			token := lexer[i]
+			if token.type != .COMMA { append(&current_expr, token); continue }
+			
+			expr := parse_expression(&current_expr)
+			append(&result, expr)
+			clear(&current_expr)
+			append(&current_expr, Token{.EOL, "<EOL>", 999})
+		}
+
+		expr := parse_expression(&current_expr)
+		append(&result, expr)
+		delete(current_expr)
+
+		return Print_Statement{ result[:] }
+	}
+
+	return nil
+}
+
 parse_program :: proc(lexer: Lexer) -> Program {
 	result := make(Program)
 	current_line := make(Lexer)
@@ -66,15 +111,22 @@ parse_program :: proc(lexer: Lexer) -> Program {
 	
 	for token in lexer {
 		if token.type != .NEW_LINE { append(&current_line, token); continue }
-		append_line(&lines, &current_line)
+		if len(current_line) > 0 do append_line(&lines, &current_line)
 		clear(&current_line)
 	}
 
-	append_line(&lines, &current_line)
+	if len(current_line) > 0 do append_line(&lines, &current_line)
 	reverse(&lines)
 	
 	for &line in lines {
-		append(&result, parse_expression(&line))
+		if len(line) <= 1 do continue
+		stmt := parse_statement(&line)
+		if stmt != nil {
+			append(&result, stmt.?)
+		} else {
+			append(&result, parse_expression(&line))
+		}
+		
 		delete(line)
 	}
 
@@ -146,8 +198,29 @@ Expression :: union {
 	^Binary_Operation,
 }
 
+Program_Statement_Type :: enum {
+	DECLARATION,
+	START,
+	FINISH,
+}
+
+Program_Statement :: struct {
+	type: Program_Statement_Type,
+	value: string
+}
+
+Print_Statement :: struct { expr: []Expression }
+Read_Statement :: struct { identifier: string }
+
+Statement :: union {
+	Program_Statement,
+	Print_Statement,
+	Read_Statement,
+}
+
 Line :: union {
 	Expression,
+	Statement,
 }
 
 Program :: [dynamic]Line
