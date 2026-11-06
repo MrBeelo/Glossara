@@ -9,26 +9,60 @@ import "core:math"
 import "core:strings"
 import "core:fmt"
 
+program_name: string
+program_started, program_ended: bool
+
 @(private)
-run_program :: proc(program: Program) {
-	for line in program do switch v in line {
-	case Expression:
-		expr := line.(Expression)
-		if info := is_assignment_expr(expr); info != nil {
-			value := evaluate_expression(info.?.exp^)
-			vars[info.?.str] = value
-		} else {
-			error("Unhandled expression!")
+run_program :: proc(program: Program) {	
+	for line, index in program {
+		if index == 0 {
+			stmt, stmt_ok := line.(Statement)
+			if !stmt_ok do error("Expected program name declaration at the start!")
+			pstmt, pstmt_ok := stmt.(Program_Statement)
+			if !pstmt_ok do error("Expected program name declaration at the start!")
+			program_name = pstmt.value
+			continue
 		}
-	case Statement:
-		stmt := line.(Statement)
-		#partial switch x in stmt {
-		case Print_Statement: {
-			#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
-			fmt.printf("\n")
-		}
+
+		switch v in line {
+		case Statement:
+			stmt := line.(Statement)
+			#partial switch x in stmt {
+			case Program_Statement: {
+				switch x.type {
+				case .DECLARATION: error("Double program name declaration!")
+				case .START: 
+					if program_started do error("Program has already started!")
+					program_started = true
+				case .FINISH:
+					if !program_started do error("Program isn't running!")
+					if program_ended do error("Program has already ended!")
+					program_ended = true
+				}
+			}
+			case Print_Statement:
+				if !program_started || program_ended do error("Cannot print anything while program isn't running!")
+				#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
+				fmt.printf("\n")
+			case Read_Statement:
+				if !program_started || program_ended do error("Cannot read anything while program isn't running!")
+				error("reading not supported yet :(\n") // TODO: yknow
+			}
+		case Expression:
+			if !program_started || program_ended do error("Cannot calculate expressions while program isn't running!")
+			expr := line.(Expression)
+			if info := is_assignment_expr(expr); info != nil {
+				value := evaluate_expression(info.?.exp^)
+				vars[info.?.str] = value
+			} else {
+				error("Unhandled expression!")
+			}
 		}
 	}
+
+	if !program_started do error("Nothing to do, program hasn't started!")
+	if program_started && !program_ended do error("Program is unfinished!")
+	fmt.printf("[Program %s finished succesfully.]\n", program_name)
 }
 
 print_data_type :: proc(dt: Data_Type) {
@@ -181,6 +215,8 @@ logical_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 }
 
 error :: proc(message: string, args: ..any) -> ! {
-	fmt.printf("[INTERPRETER] %s\n", fmt.ctprintf(message, ..args) )
+	state: string = ("INACTIVE" if !program_started else
+		"ACTIVE" if program_started && !program_ended else "FINISHED")
+	fmt.printf("[INTERPRETER] %s [name=%s, state=%s]\n", fmt.ctprintf(message, ..args), program_name, state )
 	panic("Interpreter encountered an error!")
 }
