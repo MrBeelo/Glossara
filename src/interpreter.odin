@@ -24,10 +24,17 @@ run_program :: proc(program: Program) {
 		stmt := line.(Statement)
 		#partial switch x in stmt {
 		case Print_Statement: {
-			#reverse for expr in x.expr do fmt.printf("%v", evaluate_expression(expr))
+			#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
 			fmt.printf("\n")
 		}
 		}
+	}
+}
+
+print_data_type :: proc(dt: Data_Type) {
+	switch v in dt {
+	case int, f32, string: fmt.printf("%v", v)
+	case bool: fmt.printf("ΑΛΗΘΗΣ" if v else "ΨΕΥΔΗΣ")
 	}
 }
 

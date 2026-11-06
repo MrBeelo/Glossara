@@ -120,7 +120,7 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 	}
 
 	if str == "" do str = utf8.runes_to_string({lookahead, next.?} if next != nil else {lookahead})
-	if type != .COMMENT do append(tokens, Token{type, str, token_start_pos})
+	if type != .COMMENT do append(tokens, Token{type, str, token_start_pos}); else do append(tokens, Token{.NEW_LINE, "\n", token_start_pos})
 	advance_tokenization(2 if next != nil else 1)
 }
 
