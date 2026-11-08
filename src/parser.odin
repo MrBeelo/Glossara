@@ -99,6 +99,33 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 		delete(current_expr)
 
 		return Print_Statement{ result[:] }
+	case .READ:
+		token_count := len(lexer) - 1
+		if token_count == 0 do error("Nothing to read!")
+
+		result := make([dynamic]string)
+		reached_comma := true
+		
+		for i := 0; i < token_count; i += 1 {
+			token := lexer[i]
+			if token.type == .IDENTIFIER && reached_comma {
+				if !reached_comma do error("Expected comma!")
+				append(&result, token.value)
+				reached_comma = false
+				continue
+			}
+			
+			if token.type == .COMMA { 
+				reached_comma = true
+				continue
+			}
+
+			error("Unable to read identifier: '%s'", token.value)
+		}
+
+		if reached_comma do error("Expected to read identifier!")
+
+		return Read_Statement{ result[:] }
 	}
 
 	return nil
@@ -210,7 +237,7 @@ Program_Statement :: struct {
 }
 
 Print_Statement :: struct { expr: []Expression }
-Read_Statement :: struct { identifier: string }
+Read_Statement :: struct { identifiers: []string }
 
 Statement :: union {
 	Program_Statement,

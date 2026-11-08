@@ -8,6 +8,7 @@ import "core:strconv"
 import "core:math"
 import "core:strings"
 import "core:fmt"
+import "core:os"
 
 program_name: string
 program_started, program_ended: bool
@@ -46,7 +47,7 @@ run_program :: proc(program: Program) {
 				fmt.printf("\n")
 			case Read_Statement:
 				if !program_started || program_ended do error("Cannot read anything while program isn't running!")
-				error("reading not supported yet :(\n") // TODO: yknow
+				#reverse for id in x.identifiers do read_data_type(id)
 			}
 		case Expression:
 			if !program_started || program_ended do error("Cannot calculate expressions while program isn't running!")
@@ -69,6 +70,32 @@ print_data_type :: proc(dt: Data_Type) {
 	switch v in dt {
 	case int, f32, string: fmt.printf("%v", v)
 	case bool: fmt.printf("ΑΛΗΘΗΣ" if v else "ΨΕΥΔΗΣ")
+	}
+}
+
+read_data_type :: proc(id: string) {
+	_, id_exists := vars[id]
+	if !id_exists do error("Can't read to unknown variable: %s!", id)
+	
+	buf: [256]u8
+	out, err := os.read(os.stdin, buf[:])
+	if err != nil do error("Error reading identifier: %v!", err)
+	
+	str := string(buf[:out-1])
+	switch type_of_dt(vars[id]) {
+	case int:
+		result, ok := strconv.parse_int(str)
+		if !ok do error("Error parsing integer: '%s'!", str)
+		vars[id] = result
+	case f32:
+		result, ok := strconv.parse_f32(str)
+		if !ok do error("Error parsing float!")
+		vars[id] = result
+	case bool:
+		if str == "ΑΛΗΘΗΣ" do vars[id] = true
+		if str == "ΨΕΥΔΗΣ" do vars[id] = false
+		if str != "ΑΛΗΘΗΣ" && str != "ΨΕΥΔΗΣ" do error("Tried to read %s, which is not a bool!", str)
+	case string: vars[id] = str
 	}
 }
 
