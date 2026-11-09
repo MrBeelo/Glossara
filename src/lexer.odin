@@ -103,7 +103,12 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		type = .COMMENT
 	case '\'', '"', 'ʽ', 'ʼ':
 		str = recurse(proc(r: rune) -> bool { return r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' }, true)
-		if r := rune_at(current_pos); r != '\'' && r != '"' && r != 'ʽ' && r != 'ʼ' do error("No ending quote!")
+
+		r := rune_at(current_pos)
+		matching_end_quote := (lookahead == '\'' && r == '\'') || (lookahead == '"' && r == '"') || 
+			(lookahead == 'ʽ' && (r == 'ʽ' || r == 'ʼ'))
+		if !matching_end_quote do error("No matching quote for '%v'!", lookahead)
+		
 		str = strings.concatenate({"\"", str}) // We do this to differentiate strings from variables when interpreting.
 		type = .STRING_LITERAL
 	case '<':

@@ -3,8 +3,6 @@ package glsr
 import "core:fmt"
 import "core:os"
 
-vars: map[string]Data_Type
-
 main :: proc() {
 	args := os.args
 
@@ -14,7 +12,7 @@ main :: proc() {
 	if err != nil do fmt.panicf("Error with reading file \"%s\"!", args[1])
 	str := string(data)
 
-	vars := new(map[string]Data_Type)
+	values = make(map[string]Value)
 	
 	lexer := new_lexer(str)
 	program := parse_program(lexer)	

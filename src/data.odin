@@ -1,11 +1,28 @@
 package glsr
 
+values: map[string]Value
+
+Value :: struct {
+	type: Data_Type,
+	variable: bool,
+	initialized: bool,
+}
+
 Data_Type :: union {
 	int,
 	f32,
 	string,
 	bool,
 }
+
+get_value :: proc(id: string) -> (Value, bool) {
+	value, ok := values[id]
+	if !ok || !value.initialized do return value, false
+	return value, true
+}
+
+var_of :: proc(dt: Data_Type) -> Value { return {dt, true, true} }
+const_of :: proc(dt: Data_Type) -> Value { return {dt, false, true} }
 
 type_of_dt :: proc(dt: Data_Type) -> typeid {
 	switch v in dt {

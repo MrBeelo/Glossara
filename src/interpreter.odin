@@ -12,11 +12,90 @@ import "core:os"
 
 program_name: string
 program_started, program_ended: bool
+current_line: int
+
+interpret_statement :: proc(line: Line, program: Program) {
+	stmt := line.(Statement)
+	#partial switch x in stmt {
+	case Program_Statement:
+		switch x.type {
+		case .DECLARATION: error("Double program name declaration!")
+		case .START: 
+			if program_started do error("Program has already started!")
+			program_started = true
+		case .FINISH:
+			if !program_started do error("Program isn't running!")
+			if program_ended do error("Program has already ended!")
+			program_ended = true
+		}
+	case Print_Statement:
+		if !program_started || program_ended do error("Cannot print anything while program isn't running!")
+		#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
+		fmt.printf("\n")
+	case Read_Statement:
+		if !program_started || program_ended do error("Cannot read anything while program isn't running!")
+		#reverse for id in x.identifiers do read_data_type(id)
+	case Value_Type_Header:
+	header := stmt.(Value_Type_Header).type
+	switch header {
+	case .CONSTANT: interpret_constant_header(program)
+	case .VARIABLE: error("No variable decls yet :(")
+	}
+	
+	}
+}
+
+interpret_constant_header :: proc(program: Program) {
+	current_line += 1
+	assignments := 0
+	loop: for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		switch v in subline {
+		case Expression:
+			if res := is_assignment_expr(v, "="); res != nil {
+				assignments += 1
+				values[res.?.str] = const_of(evaluate_expression(res.?.exp^))
+			} else {
+				error("Expected constant declaration!")
+			}
+		case Statement: switch w in v {
+			case Print_Statement, Read_Statement: error("Expected some constant declaration, got %v!", w)
+			case Program_Statement:
+				if w.type != .START do error("Unexpected program statement!")
+				if assignments == 0 do error("Got no constant assignments!")
+				break loop
+			case Value_Type_Header:
+				if w.type == .CONSTANT do error("Duplicate constant header!")
+				if assignments == 0 do error("Got no constant assignments!")
+				break loop
+		}
+			
+		}
+	}
+	current_line -= 1
+}
+
+interpret_expression :: proc(line: Line) {
+	if !program_started || program_ended do error("Cannot calculate expressions while program isn't running!")
+	expr := line.(Expression)
+	
+	info := is_assignment_expr(expr)
+	if info == nil do error("Unhandled expression!")
+	
+	_, ok := values[info.?.str]
+	if !ok do error("Unknown value: '%s'!", info.?.str)
+
+	value := evaluate_expression(info.?.exp^)
+	if !values[info.?.str].variable do error("Cannot assign to a constant!")
+	values[info.?.str] = var_of(value)
+}
 
 @(private)
-run_program :: proc(program: Program) {	
-	for line, index in program {
-		if index == 0 {
+run_program :: proc(program: Program) {
+	current_line = 0
+	for ; current_line < len(program); current_line += 1 {
+		line := program[current_line]
+		if current_line == 0 {
 			stmt, stmt_ok := line.(Statement)
 			if !stmt_ok do error("Expected program name declaration at the start!")
 			pstmt, pstmt_ok := stmt.(Program_Statement)
@@ -26,38 +105,8 @@ run_program :: proc(program: Program) {
 		}
 
 		switch v in line {
-		case Statement:
-			stmt := line.(Statement)
-			#partial switch x in stmt {
-			case Program_Statement: {
-				switch x.type {
-				case .DECLARATION: error("Double program name declaration!")
-				case .START: 
-					if program_started do error("Program has already started!")
-					program_started = true
-				case .FINISH:
-					if !program_started do error("Program isn't running!")
-					if program_ended do error("Program has already ended!")
-					program_ended = true
-				}
-			}
-			case Print_Statement:
-				if !program_started || program_ended do error("Cannot print anything while program isn't running!")
-				#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
-				fmt.printf("\n")
-			case Read_Statement:
-				if !program_started || program_ended do error("Cannot read anything while program isn't running!")
-				#reverse for id in x.identifiers do read_data_type(id)
-			}
-		case Expression:
-			if !program_started || program_ended do error("Cannot calculate expressions while program isn't running!")
-			expr := line.(Expression)
-			if info := is_assignment_expr(expr); info != nil {
-				value := evaluate_expression(info.?.exp^)
-				vars[info.?.str] = value
-			} else {
-				error("Unhandled expression!")
-			}
+		case Statement: interpret_statement(line, program)
+		case Expression: interpret_expression(line)
 		}
 	}
 
@@ -74,28 +123,30 @@ print_data_type :: proc(dt: Data_Type) {
 }
 
 read_data_type :: proc(id: string) {
-	_, id_exists := vars[id]
+	_, id_exists := values[id]
 	if !id_exists do error("Can't read to unknown variable: %s!", id)
+
+	if !values[id].variable do error("Cannot read to a constant!")
 	
 	buf: [256]u8
 	out, err := os.read(os.stdin, buf[:])
 	if err != nil do error("Error reading identifier: %v!", err)
 	
 	str := string(buf[:out-1])
-	switch type_of_dt(vars[id]) {
+	switch type_of_dt(values[id].type) {
 	case int:
 		result, ok := strconv.parse_int(str)
 		if !ok do error("Error parsing integer: '%s'!", str)
-		vars[id] = result
+		values[id] = var_of(result)
 	case f32:
 		result, ok := strconv.parse_f32(str)
 		if !ok do error("Error parsing float!")
-		vars[id] = result
+		values[id] = var_of(result)
 	case bool:
-		if str == "ΑΛΗΘΗΣ" do vars[id] = true
-		if str == "ΨΕΥΔΗΣ" do vars[id] = false
+		if str == "ΑΛΗΘΗΣ" do values[id] = var_of(true)
+		if str == "ΨΕΥΔΗΣ" do values[id] = var_of(false)
 		if str != "ΑΛΗΘΗΣ" && str != "ΨΕΥΔΗΣ" do error("Tried to read %s, which is not a bool!", str)
-	case string: vars[id] = str
+	case string: values[id] = var_of(str)
 	}
 }
 
@@ -120,9 +171,9 @@ evaluate_expression :: proc(expr: Expression) -> Data_Type {
 		if str == "ΑΛΗΘΗΣ" do return true
 		if str == "ΨΕΥΔΗΣ" do return false
 
-		result, ok := vars[str]
-		if !ok do error("Variable \"%s\" was not declared!", str)
-		return result
+		result, ok := get_value(str)
+		if !ok do error("Value \"%s\" was not declared or is undefined!", str)
+		return result.type
 	case ^Unary_Operation:
 		value := evaluate_expression(v.value)
 		switch v.operator {

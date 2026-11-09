@@ -126,6 +126,8 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 		if reached_comma do error("Expected to read identifier!")
 
 		return Read_Statement{ result[:] }
+	case .VARIABLES: return Value_Type_Header{ .VARIABLE }
+	case .CONSTANTS: return Value_Type_Header{ .CONSTANT }
 	}
 
 	return nil
@@ -163,11 +165,11 @@ parse_program :: proc(lexer: Lexer) -> Program {
 	return result
 }
 
-is_assignment_expr :: proc(expr: Expression) -> Maybe( struct{str: string, exp: ^Expression} ) {
+is_assignment_expr :: proc(expr: Expression, symbol_overload := "<-") -> Maybe( struct{str: string, exp: ^Expression} ) {
 	switch v in expr {
 	case Atom, ^Unary_Operation: return nil
 	case ^Binary_Operation:
-		if expr.(^Binary_Operation).operator == "<-" {
+		if expr.(^Binary_Operation).operator == symbol_overload {
 			name := cast(string)expr.(^Binary_Operation).left.(Atom)
 			if !is_valid_identifier_name(name) do error("Invalid identifier name: %s", name)
 			result: struct{str: string, exp: ^Expression} = { name, &expr.(^Binary_Operation).right }
@@ -239,10 +241,13 @@ Program_Statement :: struct {
 Print_Statement :: struct { expr: []Expression }
 Read_Statement :: struct { identifiers: []string }
 
+Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
+
 Statement :: union {
 	Program_Statement,
 	Print_Statement,
 	Read_Statement,
+	Value_Type_Header,
 }
 
 Line :: union {
