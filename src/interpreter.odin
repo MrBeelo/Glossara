@@ -16,7 +16,7 @@ current_line: int
 
 interpret_statement :: proc(line: Line, program: Program) {
 	stmt := line.(Statement)
-	#partial switch x in stmt {
+	switch x in stmt {
 	case Program_Statement:
 		switch x.type {
 		case .DECLARATION: error("Double program name declaration!")
@@ -36,12 +36,12 @@ interpret_statement :: proc(line: Line, program: Program) {
 		if !program_started || program_ended do error("Cannot read anything while program isn't running!")
 		#reverse for id in x.identifiers do read_data_type(id)
 	case Value_Type_Header:
-	header := stmt.(Value_Type_Header).type
-	switch header {
-	case .CONSTANT: interpret_constant_header(program)
-	case .VARIABLE: error("No variable decls yet :(")
-	}
-	
+		header := stmt.(Value_Type_Header).type
+		switch header {
+		case .CONSTANT: interpret_constant_header(program)
+		case .VARIABLE: interpret_variable_header(program)
+		}
+	case Variable_Init_Statement: error("Unexpected variable initialization statement!")
 	}
 }
 
@@ -68,8 +68,42 @@ interpret_constant_header :: proc(program: Program) {
 				if w.type == .CONSTANT do error("Duplicate constant header!")
 				if assignments == 0 do error("Got no constant assignments!")
 				break loop
+			case Variable_Init_Statement: error("Expected constant declaraion, not variable!")
 		}
 			
+		}
+	}
+	current_line -= 1
+}
+
+interpret_variable_header :: proc(program: Program) {
+	current_line += 1
+	reached_type: bool
+	loop: for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		switch v in subline {
+		case Expression: error("Expected variable declaration, got expression!")
+		case Statement: switch w in v {
+			case Print_Statement, Read_Statement: error("Expected some constant declaration, got %v!", w)
+			case Program_Statement:
+				if w.type != .START do error("Unexpected program statement!")
+				if reached_type == false do error("Got no variable declarations!")
+				break loop
+			case Value_Type_Header:
+				if w.type == .VARIABLE do error("Duplicate variable header!")
+				if reached_type == false do error("Got no variable declarations!")
+				break loop
+			case Variable_Init_Statement: 
+				for var in w.variables {
+					#partial switch w.type {
+					case .INTEGERS: values[var] = var_of(int(0), false) 
+					case .FLOATS: values[var] = var_of(f32(0), false)
+					case .STRINGS: values[var] = var_of("", false)
+					case .BOOLS: values[var] = var_of(false, false)
+					}
+				}
+				reached_type = true
+			}
 		}
 	}
 	current_line -= 1
@@ -87,6 +121,7 @@ interpret_expression :: proc(line: Line) {
 
 	value := evaluate_expression(info.?.exp^)
 	if !values[info.?.str].variable do error("Cannot assign to a constant!")
+	if type_of_dt(values[info.?.str].type) != type_of_dt(value) do error("Cannot assign value '%v' to variable '%s' of type '%v'!", value, info.?.str, type_of_dt(values[info.?.str].type))
 	values[info.?.str] = var_of(value)
 }
 
@@ -311,6 +346,7 @@ logical_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 error :: proc(message: string, args: ..any) -> ! {
 	state: string = ("INACTIVE" if !program_started else
 		"ACTIVE" if program_started && !program_ended else "FINISHED")
-	fmt.printf("[INTERPRETER] %s [name=%s, state=%s]\n", fmt.ctprintf(message, ..args), program_name, state )
+	fmt.printf("[INTERPRETER] %s [current_line=%d, name=%s, state=%s]\n", fmt.ctprintf(message, ..args), 
+		current_line + 1, program_name, state )
 	panic("Interpreter encountered an error!")
 }

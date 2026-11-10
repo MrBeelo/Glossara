@@ -233,12 +233,14 @@ is_ignorable :: proc(r: rune) -> bool {
 	return unicode.is_white_space(r) && r != '\n'
 }
 
-@(private) Token :: struct {
+@(private)
+Token :: struct {
 	type: Token_Type,
 	value: string,
 	start_pos: int,
 }
 
+@(private)
 Token_Type :: enum {
 	IDENTIFIER,
 	

@@ -128,6 +128,35 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 		return Read_Statement{ result[:] }
 	case .VARIABLES: return Value_Type_Header{ .VARIABLE }
 	case .CONSTANTS: return Value_Type_Header{ .CONSTANT }
+	case .INTEGERS, .FLOATS, .STRINGS, .BOOLS:
+		if lexer[len(lexer) - 2].type != .COLON do error("Expected colon!")
+		
+		token_count := len(lexer) - 2
+		if token_count == 0 do error("No variables set!")
+
+		result := make([dynamic]string)
+		reached_comma := true
+		
+		for i := 0; i < token_count; i += 1 {
+			token := lexer[i]
+			if token.type == .IDENTIFIER && reached_comma {
+				if !reached_comma do error("Expected comma!")
+				append(&result, token.value)
+				reached_comma = false
+				continue
+			}
+			
+			if token.type == .COMMA { 
+				reached_comma = true
+				continue
+			}
+
+			error("Unable to initialize variable: '%s'", token.value)
+		}
+
+		if reached_comma do error("Expected a variable name!")
+
+		return Variable_Init_Statement{ lexer[len(lexer) - 1].type, result[:] }
 	}
 
 	return nil
@@ -242,12 +271,14 @@ Print_Statement :: struct { expr: []Expression }
 Read_Statement :: struct { identifiers: []string }
 
 Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
+Variable_Init_Statement :: struct { type: Token_Type, variables: []string }
 
 Statement :: union {
 	Program_Statement,
 	Print_Statement,
 	Read_Statement,
 	Value_Type_Header,
+	Variable_Init_Statement,
 }
 
 Line :: union {

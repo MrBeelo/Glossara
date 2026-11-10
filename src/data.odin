@@ -21,8 +21,8 @@ get_value :: proc(id: string) -> (Value, bool) {
 	return value, true
 }
 
-var_of :: proc(dt: Data_Type) -> Value { return {dt, true, true} }
-const_of :: proc(dt: Data_Type) -> Value { return {dt, false, true} }
+var_of :: proc(dt: Data_Type, initialized := true) -> Value { return {dt, true, initialized} }
+const_of :: proc(dt: Data_Type, initialized := true) -> Value { return {dt, false, initialized} }
 
 type_of_dt :: proc(dt: Data_Type) -> typeid {
 	switch v in dt {
