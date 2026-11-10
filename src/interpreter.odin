@@ -162,6 +162,8 @@ read_data_type :: proc(id: string) {
 	if !id_exists do error("Can't read to unknown variable: %s!", id)
 
 	if !values[id].variable do error("Cannot read to a constant!")
+
+	if type_of_dt(values[id].type) == bool do error("Cannot read to bools!")
 	
 	buf: [256]u8
 	out, err := os.read(os.stdin, buf[:])
@@ -178,6 +180,7 @@ read_data_type :: proc(id: string) {
 		if !ok do error("Error parsing float!")
 		values[id] = var_of(result)
 	case bool:
+		// Note: Bools cannot be read, but if they could, it would look like this:
 		if str == "ΑΛΗΘΗΣ" do values[id] = var_of(true)
 		if str == "ΨΕΥΔΗΣ" do values[id] = var_of(false)
 		if str != "ΑΛΗΘΗΣ" && str != "ΨΕΥΔΗΣ" do error("Tried to read %s, which is not a bool!", str)

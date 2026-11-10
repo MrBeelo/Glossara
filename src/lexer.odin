@@ -48,7 +48,7 @@ new_lexer :: proc(inp: string) -> Lexer {
 			handle_symbols(lexer)
 		} else if unicode.is_digit(lookahead) {
 			handle_numbers(lexer)
-		} else if is_letter(lookahead) || lookahead == '_' {
+		} else if is_letter(lookahead) {
 			handle_words(lexer)
 		} else {
 			error("Unknown character '%v' (%U)", 

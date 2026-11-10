@@ -213,7 +213,7 @@ is_valid_identifier_name :: proc(name: string) -> bool {
 	if len(name) == 0 do return false
 	for char, index in name {
 		if is_letter(char) do continue
-		if char == '_' do continue
+		if char == '_' && index > 0 do continue
 		if unicode.is_digit(char) && index > 0 do continue
 		return false
 	}
