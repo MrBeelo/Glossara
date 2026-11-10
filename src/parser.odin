@@ -59,7 +59,7 @@ append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
 	append(lines, line_tokens)
 }
 
-parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
+parse_line :: proc(input_lexer: ^Lexer) -> Line {
 	if len(input_lexer) == 0 do error("Nothing to parse!")
 	
 	lexer := make([dynamic]Token)
@@ -83,7 +83,7 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 
 		result := make([dynamic]Expression)
 		current_expr := make([dynamic]Token)
-		append(&current_expr, Token{.EOL, "<EOL>", 999})
+		append(&current_expr, EOL_Token)
 		for i := 0; i < token_count; i += 1 {
 			token := lexer[i]
 			if token.type != .COMMA { append(&current_expr, token); continue }
@@ -91,7 +91,7 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 			expr := parse_expression(&current_expr)
 			append(&result, expr)
 			clear(&current_expr)
-			append(&current_expr, Token{.EOL, "<EOL>", 999})
+			append(&current_expr, EOL_Token)
 		}
 
 		expr := parse_expression(&current_expr)
@@ -157,9 +157,24 @@ parse_statement :: proc(input_lexer: ^Lexer) -> Maybe(Statement) {
 		if reached_comma do error("Expected a variable name!")
 
 		return Variable_Init_Statement{ lexer[len(lexer) - 1].type, result[:] }
+	case .IF, .ELSE_IF:
+		token_count := len(lexer) - 1
+		if lexer[0].type != .THEN do error("Expected 'THEN'!")
+
+		token_slice := lexer[1:token_count]
+
+		if len(token_slice) == 0 do error("Found no logical expression!")
+
+		tokens := make(Lexer)
+
+		append(&tokens, EOL_Token)
+		for token in token_slice do append(&tokens, token)
+
+		return If_Statement{ .IF if lexer[len(lexer) - 1].type == .IF else .ELSE_IF, tokens }
+	case .ELSE, .END_IF: return If_Statement{ .ELSE if lexer[len(lexer) - 1].type == .ELSE else .END_IF, nil }
 	}
 
-	return nil
+	return parse_expression(input_lexer)
 }
 
 parse_program :: proc(lexer: Lexer) -> Program {
@@ -178,12 +193,7 @@ parse_program :: proc(lexer: Lexer) -> Program {
 	
 	for &line in lines {
 		if len(line) <= 1 do continue
-		stmt := parse_statement(&line)
-		if stmt != nil {
-			append(&result, stmt.?)
-		} else {
-			append(&result, parse_expression(&line))
-		}
+		append(&result, parse_line(&line))
 		
 		delete(line)
 	}
@@ -237,6 +247,8 @@ binding_power :: proc(operator: string) -> (f32, f32) {
 	error("Expected operand!")
 }
 
+EOL_Token :: Token{.EOL, "<EOL>", 999}
+
 Atom :: distinct string
 
 Binary_Operation :: struct {
@@ -256,34 +268,21 @@ Expression :: union {
 	^Binary_Operation,
 }
 
-Program_Statement_Type :: enum {
-	DECLARATION,
-	START,
-	FINISH,
-}
-
-Program_Statement :: struct {
-	type: Program_Statement_Type,
-	value: string
-}
-
+Program_Statement :: struct { type: enum { DECLARATION, START, FINISH }, value: string }
 Print_Statement :: struct { expr: []Expression }
 Read_Statement :: struct { identifiers: []string }
-
 Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
 Variable_Init_Statement :: struct { type: Token_Type, variables: []string }
+If_Statement :: struct { type: enum { IF, ELSE_IF, ELSE, END_IF }, condition_tokens: Lexer }
 
-Statement :: union {
+Line :: union {
+	Expression,
 	Program_Statement,
 	Print_Statement,
 	Read_Statement,
 	Value_Type_Header,
 	Variable_Init_Statement,
-}
-
-Line :: union {
-	Expression,
-	Statement,
+	If_Statement,
 }
 
 Program :: [dynamic]Line

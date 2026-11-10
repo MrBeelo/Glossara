@@ -56,7 +56,7 @@ new_lexer :: proc(inp: string) -> Lexer {
 		}
 	}
 
-	append(lexer, Token{.EOL, "<EOL>", current_pos})
+	append(lexer, EOL_Token)
 
 	reverse(lexer)
 
@@ -170,6 +170,7 @@ handle_words :: proc(tokens: ^[dynamic]Token) {
 	case "ΑΛΛΙΩΣ_ΑΝ": type = .ELSE_IF
 	case "ΑΛΛΙΩΣ": type = .ELSE
 	case "ΤΕΛΟΣ_ΑΝ": type = .END_IF
+	case "ΤΟΤΕ": type = .THEN
 
 	case "ΟΣΟ": type = .WHILE
 	case "ΕΠΑΝΑΛΑΒΕ": type = .REPEAT
@@ -285,6 +286,7 @@ Token_Type :: enum {
 	ELSE_IF,
 	ELSE,
 	END_IF,
+	THEN,
 	
 	WHILE,
 	REPEAT,

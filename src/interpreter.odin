@@ -14,9 +14,9 @@ program_name: string
 program_started, program_ended: bool
 current_line: int
 
-interpret_statement :: proc(line: Line, program: Program) {
-	stmt := line.(Statement)
-	switch x in stmt {
+interpret_line :: proc(line: Line, program: Program) {
+	switch x in line {
+	case Expression: interpret_expression(line)
 	case Program_Statement:
 		switch x.type {
 		case .DECLARATION: error("Double program name declaration!")
@@ -36,12 +36,42 @@ interpret_statement :: proc(line: Line, program: Program) {
 		if !program_started || program_ended do error("Cannot read anything while program isn't running!")
 		#reverse for id in x.identifiers do read_data_type(id)
 	case Value_Type_Header:
-		header := stmt.(Value_Type_Header).type
+		header := line.(Value_Type_Header).type
 		switch header {
 		case .CONSTANT: interpret_constant_header(program)
 		case .VARIABLE: interpret_variable_header(program)
 		}
 	case Variable_Init_Statement: error("Unexpected variable initialization statement!")
+	case If_Statement: interpret_if_statement(x, false, program)
+	}
+}
+
+interpret_if_statement :: proc(stmt: If_Statement, have_entered_zone: bool, program: Program) {
+	if stmt.type == .END_IF do return
+	
+	toks := stmt.condition_tokens
+	value: Data_Type
+
+	if toks != nil {
+		expr := parse_expression(&toks)
+		value = evaluate_expression(expr)
+		if type_of_dt(value) != bool do error("Expected logical expression!")
+	}
+	
+	entered_zone := ((stmt.type == .IF || stmt.type == .ELSE_IF) && value.(bool)) || stmt.type == .ELSE
+	if have_entered_zone do entered_zone = false
+
+	current_line += 1
+	loop: for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		
+		#partial switch x in subline {
+		case If_Statement:
+			if x.type != .END_IF do interpret_if_statement(x, entered_zone, program)
+			break loop
+		case:
+			if entered_zone do interpret_line(subline, program)
+		}
 	}
 }
 
@@ -58,18 +88,16 @@ interpret_constant_header :: proc(program: Program) {
 			} else {
 				error("Expected constant declaration!")
 			}
-		case Statement: switch w in v {
-			case Print_Statement, Read_Statement: error("Expected some constant declaration, got %v!", w)
-			case Program_Statement:
-				if w.type != .START do error("Unexpected program statement!")
-				if assignments == 0 do error("Got no constant assignments!")
-				break loop
-			case Value_Type_Header:
-				if w.type == .CONSTANT do error("Duplicate constant header!")
-				if assignments == 0 do error("Got no constant assignments!")
-				break loop
-			case Variable_Init_Statement: error("Expected constant declaraion, not variable!")
-		}
+		case Print_Statement, Read_Statement, If_Statement: error("Expected some constant declaration, got %v!", v)
+		case Program_Statement:
+			if v.type != .START do error("Unexpected program statement!")
+			if assignments == 0 do error("Got no constant assignments!")
+			break loop
+		case Value_Type_Header:
+			if v.type == .CONSTANT do error("Duplicate constant header!")
+			if assignments == 0 do error("Got no constant assignments!")
+			break loop
+		case Variable_Init_Statement: error("Expected constant declaraion, not variable!")
 			
 		}
 	}
@@ -83,27 +111,25 @@ interpret_variable_header :: proc(program: Program) {
 		subline := program[current_line]
 		switch v in subline {
 		case Expression: error("Expected variable declaration, got expression!")
-		case Statement: switch w in v {
-			case Print_Statement, Read_Statement: error("Expected some constant declaration, got %v!", w)
-			case Program_Statement:
-				if w.type != .START do error("Unexpected program statement!")
-				if reached_type == false do error("Got no variable declarations!")
-				break loop
-			case Value_Type_Header:
-				if w.type == .VARIABLE do error("Duplicate variable header!")
-				if reached_type == false do error("Got no variable declarations!")
-				break loop
-			case Variable_Init_Statement: 
-				for var in w.variables {
-					#partial switch w.type {
-					case .INTEGERS: values[var] = var_of(int(0), false) 
-					case .FLOATS: values[var] = var_of(f32(0), false)
-					case .STRINGS: values[var] = var_of("", false)
-					case .BOOLS: values[var] = var_of(false, false)
-					}
+		case Print_Statement, Read_Statement, If_Statement: error("Expected some constant declaration, got %v!", v)
+		case Program_Statement:
+			if v.type != .START do error("Unexpected program statement!")
+			if reached_type == false do error("Got no variable declarations!")
+			break loop
+		case Value_Type_Header:
+			if v.type == .VARIABLE do error("Duplicate variable header!")
+			if reached_type == false do error("Got no variable declarations!")
+			break loop
+		case Variable_Init_Statement: 
+			for var in v.variables {
+				#partial switch v.type {
+				case .INTEGERS: values[var] = var_of(int(0), false) 
+				case .FLOATS: values[var] = var_of(f32(0), false)
+				case .STRINGS: values[var] = var_of("", false)
+				case .BOOLS: values[var] = var_of(false, false)
 				}
-				reached_type = true
 			}
+			reached_type = true
 		}
 	}
 	current_line -= 1
@@ -131,18 +157,13 @@ run_program :: proc(program: Program) {
 	for ; current_line < len(program); current_line += 1 {
 		line := program[current_line]
 		if current_line == 0 {
-			stmt, stmt_ok := line.(Statement)
-			if !stmt_ok do error("Expected program name declaration at the start!")
-			pstmt, pstmt_ok := stmt.(Program_Statement)
+			pstmt, pstmt_ok := line.(Program_Statement)
 			if !pstmt_ok do error("Expected program name declaration at the start!")
 			program_name = pstmt.value
 			continue
 		}
 
-		switch v in line {
-		case Statement: interpret_statement(line, program)
-		case Expression: interpret_expression(line)
-		}
+		interpret_line(line, program)
 	}
 
 	if !program_started do error("Nothing to do, program hasn't started!")
