@@ -238,9 +238,25 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 
 xor :: proc(a, b: bool) -> bool { return (a && !b) || (b && !a) }
 
-comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {	
-	if type_of_dt(lhs) == bool || type_of_dt(rhs) == bool do error("Cannot operate comparatively on bools!")
-	if xor(type_of_dt(lhs) == string, type_of_dt(rhs) == string) do error("Cannot operate comparatively on different types!")
+can_compare :: proc(left, right: Data_Type) -> bool {
+	lt, rt := type_of_dt(left), type_of_dt(right)
+	if lt == string && rt != string do return false
+	if lt != string && rt == string do return false
+	if lt == bool && rt != bool do return false
+	if lt != bool && rt == bool do return false
+	return true
+}
+
+comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
+	if !can_compare(lhs, rhs) do error("Cannot operate comparatively on different types!")
+
+	if type_of_dt(lhs) == bool && type_of_dt(rhs) == bool {
+		switch op {
+		case "=": return lhs.(bool) == rhs.(bool)
+		case "<>": return lhs.(bool) != rhs.(bool)
+		case "<", "<=", ">", ">=": error("Cannot do comparison '%s' on bools!", op)
+		}
+	}
 	
 	if type_of_dt(lhs) == string && type_of_dt(rhs) == string {
 		llen, rlen := len(lhs.(string)), len(rhs.(string))
