@@ -42,37 +42,56 @@ interpret_line :: proc(line: Line, program: Program) {
 		case .VARIABLE: interpret_variable_header(program)
 		}
 	case Variable_Init_Statement: error("Unexpected variable initialization statement!")
-	case If_Statement: interpret_if_statement(x, false, program)
+	case If_Statement: interpret_if_statement(x, program)
 	}
 }
 
-interpret_if_statement :: proc(stmt: If_Statement, have_entered_zone: bool, program: Program) {
-	if stmt.type == .END_IF do return
+get_if_statement_condition :: proc(stmt: If_Statement) -> bool {
+	if stmt.type == .ELSE || stmt.type == .END_IF do error("Cannot get condition of '%v' statement!", stmt.type)
 	
 	toks := stmt.condition_tokens
-	value: Data_Type
-
-	if toks != nil {
-		expr := parse_expression(&toks)
-		value = evaluate_expression(expr)
-		if type_of_dt(value) != bool do error("Expected logical expression!")
-	}
+	expr := parse_expression(&toks)
+	value := evaluate_expression(expr)
 	
-	entered_zone := ((stmt.type == .IF || stmt.type == .ELSE_IF) && value.(bool)) || stmt.type == .ELSE
-	if have_entered_zone do entered_zone = false
+	if type_of_dt(value) != bool do error("Expected logical expression!")
+	return value.(bool)
+}
+
+interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
+	if stmt.type != .IF do error("Unexpected statement of type '%v'!", stmt.type)
+	
+	in_zone := get_if_statement_condition(stmt)
+	have_entered_zone := in_zone
 
 	current_line += 1
+	scope_level: int
+	
 	loop: for ; current_line < len(program); current_line += 1 {
 		subline := program[current_line]
 		
 		#partial switch x in subline {
 		case If_Statement:
-			if x.type != .END_IF do interpret_if_statement(x, entered_zone, program)
-			break loop
+			switch x.type {
+			case .IF:
+				if in_zone do interpret_if_statement(x, program); else do scope_level += 1
+			case .ELSE_IF:
+				if scope_level > 0 do continue
+				if in_zone do have_entered_zone = true
+				in_zone = false if in_zone else get_if_statement_condition(x)
+			case .ELSE:
+				if scope_level > 0 do continue
+				if in_zone do have_entered_zone = true
+				in_zone = false if in_zone else true if !have_entered_zone else in_zone
+			case .END_IF:
+				if scope_level == 0 do return
+				scope_level -= 1
+			}
 		case:
-			if entered_zone do interpret_line(subline, program)
+			if in_zone do interpret_line(subline, program)
 		}
 	}
+
+	error("Program finished without if statement closing!")
 }
 
 interpret_constant_header :: proc(program: Program) {
@@ -271,11 +290,11 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	case "-": return lhs.(int) - rhs.(int)
 	case "*": return lhs.(int) * rhs.(int)
 	case "/": return f32(lhs.(int)) / f32(rhs.(int))
-	case "DIV": return lhs.(int) %% rhs.(int)
+	case "DIV": return lhs.(int) / rhs.(int)
 	case "MOD": return lhs.(int) % rhs.(int)
 	case "^":
 		result := math.pow(f32(lhs.(int)), f32(rhs.(int)))
-		if f32(int(result)) == result do return int(result)
+		if float_to_int(result) != nil do return int(result)
 		return result
 	}
 
@@ -287,12 +306,23 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	case "-": return lhs_float - rhs_float
 	case "*": return lhs_float * rhs_float
 	case "/": return lhs_float / rhs_float
-	case "DIV": error("Cannot perform DIV on floats!")
-	case "MOD": error("Cannot perform MOD on floats!")
+	case "DIV":
+		lhs_int, rhs_int := float_to_int(lhs_float), float_to_int(rhs_float)
+		if lhs_int == nil || rhs_int == nil do error("Cannot perform DIV on floats!")
+		return lhs_int.? / rhs_int.?
+	case "MOD": 
+		lhs_int, rhs_int := float_to_int(lhs_float), float_to_int(rhs_float)
+		if lhs_int == nil || rhs_int == nil do error("Cannot perform MOD on floats!")
+		return lhs_int.? % rhs_int.?
 	case "^": return math.pow(lhs_float, rhs_float)
 	}
 	
 	unreachable()
+}
+
+float_to_int :: proc(float: f32) -> Maybe(int) {
+	if f32(int(float)) != float do return nil
+	return int(float)
 }
 
 xor :: proc(a, b: bool) -> bool { return (a && !b) || (b && !a) }

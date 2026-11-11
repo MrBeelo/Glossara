@@ -2,5 +2,5 @@
 
 Todo: 
 - Get rid of EOL once and for all!
-- control flow: if, while, for, etc
+- control flow: while, for, switch, do-while
 - Lists/Arrays!
