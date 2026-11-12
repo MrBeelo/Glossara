@@ -4,6 +4,12 @@ import "core:unicode"
 import "core:fmt"
 
 parse_expression :: proc(lexer: ^Lexer, min_bind_power: f32 = -1) -> Expression {
+	// Fix to fit to the form <EOL> <reversed lexer>
+	if lexer[0].type != .EOL {
+		append(lexer, Token{.EOL, "<EOL>", 999})
+		reverse(lexer)
+	}
+	
 	left_hand_side: Expression
 	{
 		token := advance_lexer(lexer)
@@ -54,7 +60,6 @@ parse_expression :: proc(lexer: ^Lexer, min_bind_power: f32 = -1) -> Expression 
 append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
 	if len(current_line) == 0 do return
 	line_tokens := make([dynamic]Token)
-	if current_line[0].type != .EOL do append(&line_tokens, Token{.EOL, "<EOL>", current_line[0].start_pos + 1})
     append(&line_tokens, ..current_line[:])
 	append(lines, line_tokens)
 }
@@ -66,32 +71,29 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 	defer delete(lexer)
 	
 	for token in input_lexer do append(&lexer, token)
-	pop_front(&lexer)
 	
-	#partial switch lexer[len(lexer) - 1].type {
+	#partial switch lexer[0].type {
 	case .PROGRAM:
 		if len(lexer) == 1 do error("Missing program name!")
 		if len(lexer) == 3 do error("Too many program names!")
-		name := lexer[0].value
+		name := lexer[1].value
 		if !is_valid_identifier_name(name) do error("Not a valid program name!")
 		return Program_Statement{.DECLARATION, name}
 	case .BEGIN_PROGRAM: return Program_Statement{.START, "START"}
 	case .END_PROGRAM: return Program_Statement{.FINISH, "FINISH"}
 	case .PRINT:
-		token_count := len(lexer) - 1
-		if token_count == 0 do error("Nothing to print!")
+		if len(lexer) == 1 do error("Nothing to print!")
 
 		result := make([dynamic]Expression)
 		current_expr := make([dynamic]Token)
-		append(&current_expr, EOL_Token)
-		for i := 0; i < token_count; i += 1 {
+		
+		for i := 1; i < len(lexer); i += 1 {
 			token := lexer[i]
 			if token.type != .COMMA { append(&current_expr, token); continue }
 			
 			expr := parse_expression(&current_expr)
 			append(&result, expr)
 			clear(&current_expr)
-			append(&current_expr, EOL_Token)
 		}
 
 		expr := parse_expression(&current_expr)
@@ -100,13 +102,12 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 		return Print_Statement{ result[:] }
 	case .READ:
-		token_count := len(lexer) - 1
-		if token_count == 0 do error("Nothing to read!")
+		if len(lexer) == 1 do error("Nothing to read!")
 
 		result := make([dynamic]string)
 		reached_comma := true
 		
-		for i := 0; i < token_count; i += 1 {
+		for i := 1; i < len(lexer); i += 1 {
 			token := lexer[i]
 			if token.type == .IDENTIFIER && reached_comma {
 				if !reached_comma do error("Expected comma!")
@@ -129,15 +130,14 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 	case .VARIABLES: return Value_Type_Header{ .VARIABLE }
 	case .CONSTANTS: return Value_Type_Header{ .CONSTANT }
 	case .INTEGERS, .FLOATS, .STRINGS, .BOOLS:
-		if lexer[len(lexer) - 2].type != .COLON do error("Expected colon!")
+		if lexer[1].type != .COLON do error("Expected colon!")
 		
-		token_count := len(lexer) - 2
-		if token_count == 0 do error("No variables set!")
+		if len(lexer) == 2 do error("No variables set!")
 
 		result := make([dynamic]string)
 		reached_comma := true
 		
-		for i := 0; i < token_count; i += 1 {
+		for i := 2; i < len(lexer); i += 1 {
 			token := lexer[i]
 			if token.type == .IDENTIFIER && reached_comma {
 				if !reached_comma do error("Expected comma!")
@@ -156,22 +156,19 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 		if reached_comma do error("Expected a variable name!")
 
-		return Variable_Init_Statement{ lexer[len(lexer) - 1].type, result[:] }
+		return Variable_Init_Statement{ lexer[0].type, result[:] }
 	case .IF, .ELSE_IF:
-		token_count := len(lexer) - 1
-		if lexer[0].type != .THEN do error("Expected 'THEN'!")
+		if lexer[len(lexer) - 1].type != .THEN do error("Expected 'THEN'!")
 
-		token_slice := lexer[1:token_count]
+		token_slice := lexer[1 : len(lexer) - 1]
 
 		if len(token_slice) == 0 do error("Found no logical expression!")
 
 		tokens := make(Lexer)
-
-		append(&tokens, EOL_Token)
 		for token in token_slice do append(&tokens, token)
 
-		return If_Statement{ .IF if lexer[len(lexer) - 1].type == .IF else .ELSE_IF, tokens }
-	case .ELSE, .END_IF: return If_Statement{ .ELSE if lexer[len(lexer) - 1].type == .ELSE else .END_IF, nil }
+		return If_Statement{ .IF if lexer[0].type == .IF else .ELSE_IF, tokens }
+	case .ELSE, .END_IF: return If_Statement{ .ELSE if lexer[0].type == .ELSE else .END_IF, nil }
 	}
 
 	return parse_expression(input_lexer)
@@ -189,12 +186,10 @@ parse_program :: proc(lexer: Lexer) -> Program {
 	}
 
 	if len(current_line) > 0 do append_line(&lines, &current_line)
-	reverse(&lines)
-	
-	for &line in lines {
-		if len(line) <= 1 do continue
-		append(&result, parse_line(&line))
 		
+	for &line, index in lines {
+		if len(line) == 0 do continue
+		append(&result, parse_line(&line))
 		delete(line)
 	}
 
@@ -246,8 +241,6 @@ binding_power :: proc(operator: string) -> (f32, f32) {
 
 	error("Expected operand!")
 }
-
-EOL_Token :: Token{.EOL, "<EOL>", 999}
 
 Atom :: distinct string
 

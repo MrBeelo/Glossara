@@ -56,15 +56,12 @@ new_lexer :: proc(inp: string) -> Lexer {
 		}
 	}
 
-	append(lexer, EOL_Token)
-
-	reverse(lexer)
-
 	return lexer^
 }
 
 @(private)
-print_lexer :: proc(lexer: Lexer) {
+print_lexer :: proc(lexer: Lexer, name := "") {
+	if name != "" do fmt.printf("---%s---\n", name)
 	for token in lexer {
 		fmt.printf("[%v, %s, %d]\n", token.type, token.value, token.start_pos)
 	}
@@ -266,8 +263,6 @@ Token_Type :: enum {
 
 	EOL,
 
-	// NOT DONE ZONE:
-
 	PROGRAM,
 	BEGIN_PROGRAM,
 	END_PROGRAM,
@@ -287,13 +282,15 @@ Token_Type :: enum {
 	ELSE,
 	END_IF,
 	THEN,
+
+	COLON,
+	COMMA,
+
+	// NOT DONE ZONE:
 	
 	WHILE,
 	REPEAT,
 	END_REPEAT,
-	
-	COLON,
-	COMMA,
 	
 	BRACKET_OPEN,
 	BRACKET_CLOSE,

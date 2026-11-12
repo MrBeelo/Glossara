@@ -30,11 +30,11 @@ interpret_line :: proc(line: Line, program: Program) {
 		}
 	case Print_Statement:
 		if !program_started || program_ended do error("Cannot print anything while program isn't running!")
-		#reverse for expr in x.expr do print_data_type(evaluate_expression(expr))
+		for expr in x.expr do print_data_type(evaluate_expression(expr))
 		fmt.printf("\n")
 	case Read_Statement:
 		if !program_started || program_ended do error("Cannot read anything while program isn't running!")
-		#reverse for id in x.identifiers do read_data_type(id)
+		for id in x.identifiers do read_data_type(id)
 	case Value_Type_Header:
 		header := line.(Value_Type_Header).type
 		switch header {
