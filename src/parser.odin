@@ -3,7 +3,7 @@ package glsr
 import "core:unicode"
 import "core:fmt"
 
-parse_expression :: proc(lexer: ^Lexer, min_bind_power: f32 = -1) -> Expression {
+parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression {
 	// Fix to fit to the form <EOL> <reversed lexer>
 	if lexer[0].type != .EOL {
 		append(lexer, Token{.EOL, "<EOL>", 999})
@@ -225,7 +225,7 @@ is_valid_identifier_name :: proc(name: string) -> bool {
 	return true
 } 
 
-binding_power :: proc(operator: string) -> (f32, f32) {
+binding_power :: proc(operator: string) -> (f64, f64) {
 	switch operator {
 	case "<-": return 0.2, 0.1
 		

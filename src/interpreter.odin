@@ -143,7 +143,7 @@ interpret_variable_header :: proc(program: Program) {
 			for var in v.variables {
 				#partial switch v.type {
 				case .INTEGERS: values[var] = var_of(int(0), false) 
-				case .FLOATS: values[var] = var_of(f32(0), false)
+				case .FLOATS: values[var] = var_of(f64(0), false)
 				case .STRINGS: values[var] = var_of("", false)
 				case .BOOLS: values[var] = var_of(false, false)
 				}
@@ -192,7 +192,9 @@ run_program :: proc(program: Program) {
 
 print_data_type :: proc(dt: Data_Type) {
 	switch v in dt {
-	case int, f32, string: fmt.printf("%v", v)
+	case int: fmt.printf("%d", v)
+	case f64: fmt.printf("%f", v)
+	case string: fmt.printf("%s", v)
 	case bool: fmt.printf("ΑΛΗΘΗΣ" if v else "ΨΕΥΔΗΣ")
 	}
 }
@@ -215,8 +217,8 @@ read_data_type :: proc(id: string) {
 		result, ok := strconv.parse_int(str)
 		if !ok do error("Error parsing integer: '%s'!", str)
 		values[id] = var_of(result)
-	case f32:
-		result, ok := strconv.parse_f32(str)
+	case f64:
+		result, ok := strconv.parse_f64(str)
 		if !ok do error("Error parsing float!")
 		values[id] = var_of(result)
 	case bool:
@@ -238,8 +240,8 @@ evaluate_expression :: proc(expr: Expression) -> Data_Type {
 			result_int, is_int := strconv.parse_int(str)
 			if is_int do return result_int
 
-			result_f32, is_float := strconv.parse_f32(str)
-			if is_float do return result_f32
+			result_f64, is_float := strconv.parse_f64(str)
+			if is_float do return result_f64
 			
 			error("Unexpected error while parsing number, got \"%s\"", str)
 		}
@@ -260,10 +262,10 @@ evaluate_expression :: proc(expr: Expression) -> Data_Type {
 			return !value.(bool)
 		case "-":
 			if type_of_dt(value) == int do return -value.(int)
-			if type_of_dt(value) == f32 do return -value.(f32)
+			if type_of_dt(value) == f64 do return -value.(f64)
 			error("Cannot negate a non-number!")
 		case "+":
-			if type_of_dt(value) == int || type_of_dt(value) == f32 do return value
+			if type_of_dt(value) == int || type_of_dt(value) == f64 do return value
 			error("Defining a non-number as positive doesn't make sense!")
 		}
 	case ^Binary_Operation:
@@ -289,17 +291,17 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	case "+": return lhs.(int) + rhs.(int)
 	case "-": return lhs.(int) - rhs.(int)
 	case "*": return lhs.(int) * rhs.(int)
-	case "/": return f32(lhs.(int)) / f32(rhs.(int))
+	case "/": return f64(lhs.(int)) / f64(rhs.(int))
 	case "DIV": return lhs.(int) / rhs.(int)
 	case "MOD": return lhs.(int) % rhs.(int)
 	case "^":
-		result := math.pow(f32(lhs.(int)), f32(rhs.(int)))
+		result := math.pow(f64(lhs.(int)), f64(rhs.(int)))
 		if float_to_int(result) != nil do return int(result)
 		return result
 	}
 
-	lhs_float := f32(lhs.(int)) if lhs_is_int else lhs.(f32)
-	rhs_float := f32(rhs.(int)) if rhs_is_int else rhs.(f32)
+	lhs_float := f64(lhs.(int)) if lhs_is_int else lhs.(f64)
+	rhs_float := f64(rhs.(int)) if rhs_is_int else rhs.(f64)
 
 	switch op {
 	case "+": return lhs_float + rhs_float
@@ -320,8 +322,10 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	unreachable()
 }
 
-float_to_int :: proc(float: f32) -> Maybe(int) {
-	if f32(int(float)) != float do return nil
+float_to_int :: proc(float: f64) -> Maybe(int) {
+	epsilon :: 0.0000000000001
+	rounded_float := f64(int(float))
+	if math.abs(float - rounded_float) > epsilon do return nil
 	return int(float)
 }
 
@@ -371,8 +375,8 @@ comparative_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 		}
 	}
 
-	lhs_float := f32(lhs.(int)) if type_of_dt(lhs) == int else lhs.(f32)
-	rhs_float := f32(rhs.(int)) if type_of_dt(rhs) == int else rhs.(f32)
+	lhs_float := f64(lhs.(int)) if type_of_dt(lhs) == int else lhs.(f64)
+	rhs_float := f64(rhs.(int)) if type_of_dt(rhs) == int else rhs.(f64)
 
 	switch op {
 	case "<": return lhs_float < rhs_float

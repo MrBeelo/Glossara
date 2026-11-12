@@ -10,7 +10,7 @@ Value :: struct {
 
 Data_Type :: union {
 	int,
-	f32,
+	f64,
 	string,
 	bool,
 }
@@ -27,7 +27,7 @@ const_of :: proc(dt: Data_Type, initialized := true) -> Value { return {dt, fals
 type_of_dt :: proc(dt: Data_Type) -> typeid {
 	switch v in dt {
 	case int: return int
-	case f32: return f32
+	case f64: return f64
 	case bool: return bool
 	case string: return string 
 	}
