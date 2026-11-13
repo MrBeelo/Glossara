@@ -43,13 +43,15 @@ interpret_line :: proc(line: Line, program: Program) {
 		}
 	case Variable_Init_Statement: error("Unexpected variable initialization statement!")
 	case If_Statement: interpret_if_statement(x, program)
+	case While_Statement: interpret_while_statement(x, program)
 	}
 }
 
-get_if_statement_condition :: proc(stmt: If_Statement) -> bool {
-	if stmt.type == .ELSE || stmt.type == .END_IF do error("Cannot get condition of '%v' statement!", stmt.type)
+get_condition :: proc(lexer: Lexer) -> bool {
+	toks := make(Lexer)
+	defer delete(toks)
 	
-	toks := stmt.condition_tokens
+	for token in lexer do append(&toks, token)
 	expr := parse_expression(&toks)
 	value := evaluate_expression(expr)
 	
@@ -57,8 +59,13 @@ get_if_statement_condition :: proc(stmt: If_Statement) -> bool {
 	return value.(bool)
 }
 
+get_if_statement_condition :: proc(stmt: If_Statement) -> bool {
+	if stmt.type == .ELSE || stmt.type == .END_IF do error("Cannot get condition of '%v' statement!", stmt.type)
+	return get_condition(stmt.condition_tokens)
+}
+
 interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
-	if stmt.type != .IF do error("Unexpected statement of type '%v'!", stmt.type)
+	if stmt.type != .IF do error("Unexpected if statement of type '%v'!", stmt.type)
 	
 	in_zone := get_if_statement_condition(stmt)
 	have_entered_zone := in_zone
@@ -66,7 +73,7 @@ interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
 	current_line += 1
 	scope_level: int
 	
-	loop: for ; current_line < len(program); current_line += 1 {
+	for ; current_line < len(program); current_line += 1 {
 		subline := program[current_line]
 		
 		#partial switch x in subline {
@@ -94,6 +101,40 @@ interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
 	error("Program finished without if statement closing!")
 }
 
+interpret_while_statement :: proc(stmt: While_Statement, program: Program) {
+	if stmt.type != .START do error("Unexpected while statement of type '%v'!", stmt.type)
+	
+	in_zone := get_condition(stmt.condition_tokens)
+
+	starting_line := current_line
+	current_line += 1
+	scope_level: int
+	
+	for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		
+		#partial switch x in subline {
+		case While_Statement:
+			switch x.type {
+			case .START:
+				if in_zone do interpret_while_statement(x, program); else do scope_level += 1
+			case .FINISH:
+				defer scope_level -= 1
+				if scope_level != 0 do continue
+				if in_zone {
+					current_line = starting_line
+					interpret_while_statement(stmt, program)
+				}
+				return
+			}
+		case:
+			if in_zone do interpret_line(subline, program)
+		}
+	}
+
+	error("Program finished without while loop closing!")
+}
+
 interpret_constant_header :: proc(program: Program) {
 	current_line += 1
 	assignments := 0
@@ -107,7 +148,7 @@ interpret_constant_header :: proc(program: Program) {
 			} else {
 				error("Expected constant declaration!")
 			}
-		case Print_Statement, Read_Statement, If_Statement: error("Expected some constant declaration, got %v!", v)
+		case Print_Statement, Read_Statement, If_Statement, While_Statement: error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
 			if assignments == 0 do error("Got no constant assignments!")
@@ -130,7 +171,7 @@ interpret_variable_header :: proc(program: Program) {
 		subline := program[current_line]
 		switch v in subline {
 		case Expression: error("Expected variable declaration, got expression!")
-		case Print_Statement, Read_Statement, If_Statement: error("Expected some constant declaration, got %v!", v)
+		case Print_Statement, Read_Statement, If_Statement, While_Statement: error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
 			if reached_type == false do error("Got no variable declarations!")

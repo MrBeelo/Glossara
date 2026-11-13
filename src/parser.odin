@@ -159,9 +159,7 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 		return Variable_Init_Statement{ lexer[0].type, result[:] }
 	case .IF, .ELSE_IF:
 		if lexer[len(lexer) - 1].type != .THEN do error("Expected 'THEN'!")
-
 		token_slice := lexer[1 : len(lexer) - 1]
-
 		if len(token_slice) == 0 do error("Found no logical expression!")
 
 		tokens := make(Lexer)
@@ -169,6 +167,16 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 		return If_Statement{ .IF if lexer[0].type == .IF else .ELSE_IF, tokens }
 	case .ELSE, .END_IF: return If_Statement{ .ELSE if lexer[0].type == .ELSE else .END_IF, nil }
+	case .WHILE:
+		if lexer[len(lexer) - 1].type != .REPEAT do error("Expected 'REPEAT'!")
+		token_slice := lexer[1 : len(lexer) - 1]
+		if len(token_slice) == 0 do error("Found no logical expression!")
+
+		tokens := make(Lexer)
+		for token in token_slice do append(&tokens, token)
+
+		return While_Statement{ .START, tokens }
+	case .END_REPEAT: return While_Statement{ .FINISH, nil }
 	}
 
 	return parse_expression(input_lexer)
@@ -267,6 +275,7 @@ Read_Statement :: struct { identifiers: []string }
 Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
 Variable_Init_Statement :: struct { type: Token_Type, variables: []string }
 If_Statement :: struct { type: enum { IF, ELSE_IF, ELSE, END_IF }, condition_tokens: Lexer }
+While_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
 
 Line :: union {
 	Expression,
@@ -276,6 +285,7 @@ Line :: union {
 	Value_Type_Header,
 	Variable_Init_Statement,
 	If_Statement,
+	While_Statement,
 }
 
 Program :: [dynamic]Line
