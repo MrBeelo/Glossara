@@ -122,10 +122,9 @@ interpret_while_statement :: proc(stmt: While_Statement, program: Program) {
 			case .FINISH:
 				defer scope_level -= 1
 				if scope_level != 0 do continue
-				if in_zone {
-					current_line = starting_line
-					interpret_while_statement(stmt, program)
-				}
+				if !in_zone do return
+				current_line = starting_line
+				interpret_while_statement(stmt, program)
 				return
 			}
 		case:
@@ -152,10 +151,9 @@ interpret_do_until_statement :: proc(stmt: Do_Until_Statement, program: Program)
 				interpret_do_until_statement(x, program)
 			case .FINISH:
 				cond := get_condition(x.condition_tokens)
-				if !cond {
-					current_line = starting_line
-					interpret_do_until_statement(stmt, program)
-				}
+				if cond do return
+				current_line = starting_line
+				interpret_do_until_statement(stmt, program)
 				return
 			}
 		case:
