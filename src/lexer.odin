@@ -172,6 +172,9 @@ handle_words :: proc(tokens: ^[dynamic]Token) {
 	case "ΟΣΟ": type = .WHILE
 	case "ΕΠΑΝΑΛΑΒΕ": type = .REPEAT
 	case "ΤΕΛΟΣ_ΕΠΑΝΑΛΗΨΗΣ": type = .END_REPEAT
+
+	case "ΑΡΧΗ_ΕΠΑΝΑΛΗΨΗΣ": type = .START_REPEAT
+	case "ΜΕΧΡΙΣ_ΟΤΟΥ": type = .UNTIL
 		
 	case "DIV", "MOD": type = .NUMERICAL_OPERATOR
 		
@@ -285,12 +288,15 @@ Token_Type :: enum {
 
 	COLON,
 	COMMA,
-
-	// NOT DONE ZONE:
 	
 	WHILE,
 	REPEAT,
 	END_REPEAT,
+
+	START_REPEAT,
+	UNTIL,
+
+	// NOT DONE ZONE:
 	
 	BRACKET_OPEN,
 	BRACKET_CLOSE,

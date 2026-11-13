@@ -177,6 +177,15 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 		return While_Statement{ .START, tokens }
 	case .END_REPEAT: return While_Statement{ .FINISH, nil }
+	case .START_REPEAT: return Do_Until_Statement{ .START, nil }
+	case .UNTIL:
+		token_slice := lexer[1 : len(lexer)]
+		if len(token_slice) == 0 do error("Found no logical expression!")
+
+		tokens := make(Lexer)
+		for token in token_slice do append(&tokens, token)
+
+		return Do_Until_Statement{ .FINISH, tokens }
 	}
 
 	return parse_expression(input_lexer)
@@ -276,6 +285,7 @@ Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
 Variable_Init_Statement :: struct { type: Token_Type, variables: []string }
 If_Statement :: struct { type: enum { IF, ELSE_IF, ELSE, END_IF }, condition_tokens: Lexer }
 While_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
+Do_Until_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
 
 Line :: union {
 	Expression,
@@ -286,6 +296,7 @@ Line :: union {
 	Variable_Init_Statement,
 	If_Statement,
 	While_Statement,
+	Do_Until_Statement,
 }
 
 Program :: [dynamic]Line

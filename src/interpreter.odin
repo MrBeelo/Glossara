@@ -44,6 +44,7 @@ interpret_line :: proc(line: Line, program: Program) {
 	case Variable_Init_Statement: error("Unexpected variable initialization statement!")
 	case If_Statement: interpret_if_statement(x, program)
 	case While_Statement: interpret_while_statement(x, program)
+	case Do_Until_Statement: interpret_do_until_statement(x, program)
 	}
 }
 
@@ -135,6 +136,36 @@ interpret_while_statement :: proc(stmt: While_Statement, program: Program) {
 	error("Program finished without while loop closing!")
 }
 
+interpret_do_until_statement :: proc(stmt: Do_Until_Statement, program: Program) {
+	if stmt.type != .START do error("Unexpected do-until statement of type '%v'!", stmt.type)
+	
+	starting_line := current_line
+	current_line += 1
+	
+	for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		
+		#partial switch x in subline {
+		case Do_Until_Statement:
+			switch x.type {
+			case .START:
+				interpret_do_until_statement(x, program)
+			case .FINISH:
+				cond := get_condition(x.condition_tokens)
+				if !cond {
+					current_line = starting_line
+					interpret_do_until_statement(stmt, program)
+				}
+				return
+			}
+		case:
+			interpret_line(subline, program)
+		}
+	}
+
+	error("Program finished without do-until loop closing!")
+}
+
 interpret_constant_header :: proc(program: Program) {
 	current_line += 1
 	assignments := 0
@@ -148,7 +179,8 @@ interpret_constant_header :: proc(program: Program) {
 			} else {
 				error("Expected constant declaration!")
 			}
-		case Print_Statement, Read_Statement, If_Statement, While_Statement: error("Expected some constant declaration, got %v!", v)
+		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement: 
+			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
 			if assignments == 0 do error("Got no constant assignments!")
@@ -158,7 +190,6 @@ interpret_constant_header :: proc(program: Program) {
 			if assignments == 0 do error("Got no constant assignments!")
 			break loop
 		case Variable_Init_Statement: error("Expected constant declaraion, not variable!")
-			
 		}
 	}
 	current_line -= 1
@@ -171,7 +202,8 @@ interpret_variable_header :: proc(program: Program) {
 		subline := program[current_line]
 		switch v in subline {
 		case Expression: error("Expected variable declaration, got expression!")
-		case Print_Statement, Read_Statement, If_Statement, While_Statement: error("Expected some constant declaration, got %v!", v)
+		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement: 
+			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
 			if reached_type == false do error("Got no variable declarations!")
