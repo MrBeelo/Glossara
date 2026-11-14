@@ -1,5 +1,7 @@
 package glsr
 
+import "core:math"
+
 values: map[string]Value
 
 Value :: struct {
@@ -13,6 +15,27 @@ Data_Type :: union {
 	f64,
 	string,
 	bool,
+}
+
+dt_equal :: proc(d1, d2: Data_Type) -> bool {
+	if type_of_dt(d1) == int && type_of_dt(d2) == f64 {
+		new_int := float_to_int(d2.(f64))
+		if new_int == nil do return false
+		return d1.(int) == new_int
+	}
+
+	if type_of_dt(d1) == f64 && type_of_dt(d2) == int {
+		new_int := float_to_int(d1.(f64))
+		if new_int == nil do return false
+		return d2.(int) == new_int
+	}
+
+	if type_of_dt(d1) == f64 && type_of_dt(d2) == f64 {
+		epsilon :: 0.0000000000001
+		return math.abs(d1.(f64) - d2.(f64)) <= epsilon
+	}
+	
+	return d1 == d2
 }
 
 get_value :: proc(id: string) -> (Value, bool) {
@@ -39,4 +62,11 @@ reverse :: proc(arr: ^[dynamic]$T) {
 	for i := 0; i < len(arr); i += 1 do temp[i] = arr[len(arr) - i - 1]
 	for i := 0; i < len(arr); i += 1 do arr[i] = temp[i]
 	delete(temp)
+}
+
+float_to_int :: proc(float: f64) -> Maybe(int) {
+	epsilon :: 0.0000000000001
+	rounded_float := f64(int(float))
+	if math.abs(float - rounded_float) > epsilon do return nil
+	return int(float)
 }

@@ -87,6 +87,7 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 	
 	switch lookahead {
 	case '\n': type = .NEW_LINE
+	case '&': type = .CONTINUE_LINE
 	case '(': type = .PARENTHESIS_OPEN
 	case ')': type = .PARENTHESIS_CLOSE
 	case '[': type = .BRACKET_OPEN
@@ -263,6 +264,7 @@ Token_Type :: enum {
 	ASSIGN,
 
 	NEW_LINE,
+	CONTINUE_LINE,
 
 	COMMENT,
 

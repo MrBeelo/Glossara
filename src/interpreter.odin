@@ -195,7 +195,7 @@ interpret_for_statement :: proc(stmt: For_Statement, program: Program) {
 		}
 
 		if !found_loop_end do error("Program finished without for loop closing!")
-		if values[stmt.id].type == to do break
+		if dt_equal(values[stmt.id].type, to) do break
 		assign_value(stmt.id, numeric_operation(values[stmt.id].type, step, "+"))
 	}
 
@@ -275,8 +275,24 @@ assign_value :: proc(id: string, value: Data_Type) {
 	if !ok do error("Unknown value: '%s'!", id)
 
 	if !values[id].variable do error("Cannot assign to a constant!")
+
+	if type_of_dt(values[id].type) == int && type_of_dt(value) == f64 {
+		new_int := float_to_int(value.(f64))
+		if new_int == nil do error("Cannot assign value '%v' to variable '%s' of type '%v'!", 
+			value, id, type_of_dt(values[id].type))
+		values[id] = var_of(new_int.(int))
+		return
+	}
+
+	if type_of_dt(values[id].type) == f64 && type_of_dt(value) == int {
+		new_float := f64(value.(int))
+		values[id] = var_of(new_float)
+		return
+	}
+	
 	if type_of_dt(values[id].type) != type_of_dt(value) do error("Cannot assign value '%v' to variable '%s' of type '%v'!", 
 		value, id, type_of_dt(values[id].type))
+	
 	values[id] = var_of(value)
 }
 
@@ -441,13 +457,6 @@ numeric_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	}
 	
 	unreachable()
-}
-
-float_to_int :: proc(float: f64) -> Maybe(int) {
-	epsilon :: 0.0000000000001
-	rounded_float := f64(int(float))
-	if math.abs(float - rounded_float) > epsilon do return nil
-	return int(float)
 }
 
 xor :: proc(a, b: bool) -> bool { return (a && !b) || (b && !a) }

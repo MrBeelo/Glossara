@@ -234,8 +234,14 @@ parse_program :: proc(lexer: Lexer) -> Program {
 	current_line := make(Lexer)
 	lines := make([dynamic]Lexer)
 	
-	for token in lexer {
-		if token.type != .NEW_LINE { append(&current_line, token); continue }
+	for token, index in lexer {
+		if token.type != .NEW_LINE && token.type != .CONTINUE_LINE { append(&current_line, token); continue }
+		if index != len(lexer) - 1 && token.type == .NEW_LINE && lexer[index + 1].type == .CONTINUE_LINE do continue
+		if token.type == .CONTINUE_LINE {
+			if index == 0 || lexer[index - 1].type != .NEW_LINE do error("Unexpected '&'!")
+			continue
+		}
+		
 		if len(current_line) > 0 do append_line(&lines, &current_line)
 		clear(&current_line)
 	}
