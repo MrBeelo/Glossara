@@ -1,5 +1,6 @@
 Απλός διερμηνευτής της ΓΛΩΣΣΑΣ (για να μάθω να φτιάχνω διερμηνευτές λολ)
 
 Todo: 
-- control flow: for, switch
+- control flow: switch
+- Functions!
 - Lists/Arrays!

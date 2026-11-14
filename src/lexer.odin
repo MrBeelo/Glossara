@@ -176,6 +176,11 @@ handle_words :: proc(tokens: ^[dynamic]Token) {
 
 	case "ΑΡΧΗ_ΕΠΑΝΑΛΗΨΗΣ": type = .START_REPEAT
 	case "ΜΕΧΡΙΣ_ΟΤΟΥ": type = .UNTIL
+
+	case "ΓΙΑ": type = .FOR
+	case "ΑΠΟ": type = .FROM
+	case "ΜΕΧΡΙ": type = .TO
+	case "ΜΕ_ΒΗΜΑ": type = .WITH_STEP
 		
 	case "DIV", "MOD": type = .NUMERICAL_OPERATOR
 		
@@ -296,6 +301,11 @@ Token_Type :: enum {
 
 	START_REPEAT,
 	UNTIL,
+
+	FOR,
+	FROM,
+	TO,
+	WITH_STEP,
 
 	// NOT DONE ZONE:
 	

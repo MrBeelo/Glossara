@@ -45,15 +45,14 @@ interpret_line :: proc(line: Line, program: Program) {
 	case If_Statement: interpret_if_statement(x, program)
 	case While_Statement: interpret_while_statement(x, program)
 	case Do_Until_Statement: interpret_do_until_statement(x, program)
+	case For_Statement: interpret_for_statement(x, program)
+	case Loop_End_Statement: error("Unexpected loop finish statement!")
 	}
 }
 
 get_condition :: proc(lexer: Lexer) -> bool {
-	toks := make(Lexer)
-	defer delete(toks)
-	
-	for token in lexer do append(&toks, token)
-	expr := parse_expression(&toks)
+	lexer := lexer
+	expr := parse_expression_copy(&lexer)
 	value := evaluate_expression(expr)
 	
 	if type_of_dt(value) != bool do error("Expected logical expression!")
@@ -102,9 +101,7 @@ interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
 	error("Program finished without if statement closing!")
 }
 
-interpret_while_statement :: proc(stmt: While_Statement, program: Program) {
-	if stmt.type != .START do error("Unexpected while statement of type '%v'!", stmt.type)
-	
+interpret_while_statement :: proc(stmt: While_Statement, program: Program) {	
 	in_zone := get_condition(stmt.condition_tokens)
 
 	starting_line := current_line
@@ -116,17 +113,14 @@ interpret_while_statement :: proc(stmt: While_Statement, program: Program) {
 		
 		#partial switch x in subline {
 		case While_Statement:
-			switch x.type {
-			case .START:
-				if in_zone do interpret_while_statement(x, program); else do scope_level += 1
-			case .FINISH:
-				defer scope_level -= 1
-				if scope_level != 0 do continue
-				if !in_zone do return
-				current_line = starting_line
-				interpret_while_statement(stmt, program)
-				return
-			}
+			if in_zone do interpret_while_statement(x, program); else do scope_level += 1
+		case Loop_End_Statement:
+			defer scope_level -= 1
+			if scope_level != 0 do continue
+			if !in_zone do return
+			current_line = starting_line
+			interpret_while_statement(stmt, program)
+			return
 		case:
 			if in_zone do interpret_line(subline, program)
 		}
@@ -164,6 +158,55 @@ interpret_do_until_statement :: proc(stmt: Do_Until_Statement, program: Program)
 	error("Program finished without do-until loop closing!")
 }
 
+interpret_for_statement :: proc(stmt: For_Statement, program: Program) {
+	stmt := stmt
+	if _, ok := values[stmt.id]; !ok do error("Unknown variable: '%s'", stmt.id)
+
+	current_line += 1
+	starting_line := current_line
+
+	from_expr := parse_expression_copy(&stmt.from_value)
+	to_expr := parse_expression_copy(&stmt.to_value)
+	step_expr: Maybe(Expression) = nil if stmt.step_value == nil else parse_expression_copy(&stmt.step_value.?)
+
+	from := evaluate_expression(from_expr)
+	to := evaluate_expression(to_expr)
+
+	if type_of_dt(from) == bool || type_of_dt(to) == bool do error("Expected number in for loop, got boolean!")
+	if type_of_dt(from) == string || type_of_dt(to) == string do error("Expected number in for loop, got string!")
+	is_float := type_of_dt(from) == f64 || type_of_dt(to) == f64
+	
+	step := Data_Type(f64(1) if is_float else int(1)) if step_expr == nil else evaluate_expression(step_expr.?)
+	if type_of_dt(step) == bool || type_of_dt(step) == string do error("Expected number in step value!")
+
+	assign_value(stmt.id, from)
+	for {
+		current_line = starting_line
+		found_loop_end := false
+		loop: for ; current_line < len(program); current_line += 1 {
+			subline := program[current_line]
+			
+			#partial switch x in subline {
+			case Loop_End_Statement: 
+				found_loop_end = true
+				break loop
+			case: interpret_line(subline, program)
+			}
+		}
+
+		if !found_loop_end do error("Program finished without for loop closing!")
+		if values[stmt.id].type == to do break
+		assign_value(stmt.id, numeric_operation(values[stmt.id].type, step, "+"))
+	}
+
+	for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		#partial switch x in subline {
+		case Loop_End_Statement: return		
+		}
+	}
+}
+
 interpret_constant_header :: proc(program: Program) {
 	current_line += 1
 	assignments := 0
@@ -177,7 +220,8 @@ interpret_constant_header :: proc(program: Program) {
 			} else {
 				error("Expected constant declaration!")
 			}
-		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement: 
+		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement,
+			For_Statement, Loop_End_Statement: 
 			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
@@ -200,7 +244,8 @@ interpret_variable_header :: proc(program: Program) {
 		subline := program[current_line]
 		switch v in subline {
 		case Expression: error("Expected variable declaration, got expression!")
-		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement: 
+		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement, 
+			For_Statement, Loop_End_Statement: 
 			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
@@ -225,6 +270,16 @@ interpret_variable_header :: proc(program: Program) {
 	current_line -= 1
 }
 
+assign_value :: proc(id: string, value: Data_Type) {
+	_, ok := values[id]
+	if !ok do error("Unknown value: '%s'!", id)
+
+	if !values[id].variable do error("Cannot assign to a constant!")
+	if type_of_dt(values[id].type) != type_of_dt(value) do error("Cannot assign value '%v' to variable '%s' of type '%v'!", 
+		value, id, type_of_dt(values[id].type))
+	values[id] = var_of(value)
+}
+
 interpret_expression :: proc(line: Line) {
 	if !program_started || program_ended do error("Cannot calculate expressions while program isn't running!")
 	expr := line.(Expression)
@@ -232,13 +287,8 @@ interpret_expression :: proc(line: Line) {
 	info := is_assignment_expr(expr)
 	if info == nil do error("Unhandled expression!")
 	
-	_, ok := values[info.?.str]
-	if !ok do error("Unknown value: '%s'!", info.?.str)
-
 	value := evaluate_expression(info.?.exp^)
-	if !values[info.?.str].variable do error("Cannot assign to a constant!")
-	if type_of_dt(values[info.?.str].type) != type_of_dt(value) do error("Cannot assign value '%v' to variable '%s' of type '%v'!", value, info.?.str, type_of_dt(values[info.?.str].type))
-	values[info.?.str] = var_of(value)
+	assign_value(info.?.str, value)
 }
 
 @(private)

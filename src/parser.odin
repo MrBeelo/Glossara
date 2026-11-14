@@ -56,6 +56,13 @@ parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression 
 	return left_hand_side
 }
 
+parse_expression_copy :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression {
+	new_lexer := make(Lexer)
+	defer delete(new_lexer)
+	for token in lexer do append(&new_lexer, token)
+	return parse_expression(&new_lexer, min_bind_power)
+}
+
 @(private = "file")
 append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
 	if len(current_line) == 0 do return
@@ -175,8 +182,8 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 		tokens := make(Lexer)
 		for token in token_slice do append(&tokens, token)
 
-		return While_Statement{ .START, tokens }
-	case .END_REPEAT: return While_Statement{ .FINISH, nil }
+		return While_Statement{ tokens }
+	case .END_REPEAT: return Loop_End_Statement{}
 	case .START_REPEAT: return Do_Until_Statement{ .START, nil }
 	case .UNTIL:
 		token_slice := lexer[1 : len(lexer)]
@@ -186,6 +193,37 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 		for token in token_slice do append(&tokens, token)
 
 		return Do_Until_Statement{ .FINISH, tokens }
+	case .FOR:
+		id := lexer[1]
+		if lexer[1].type != .IDENTIFIER do error("Expected variable name!")
+		if lexer[2].type != .FROM do error("Expected 'FROM'!")
+		
+		from_toks := make(Lexer)
+		to_toks := make(Lexer)
+		step_toks := make(Lexer)
+
+		to_reached, step_reached: bool
+
+		for i in 3..<len(lexer) {
+			token := lexer[i]
+			if token.type == .TO { to_reached = true; continue }
+			if token.type == .WITH_STEP {
+				if !to_reached do error("Expected 'TO'!")
+				step_reached = true
+				continue
+			}
+
+			if !to_reached {
+				append(&from_toks, token)
+			} else if to_reached && !step_reached {
+				append(&to_toks, token)
+			} else {
+				append(&step_toks, token)
+			}
+		}
+
+		if !to_reached do error("Missing 'TO'!")
+		return For_Statement{ id.value, from_toks, to_toks, (step_toks if len(step_toks) != 0 else nil) }
 	}
 
 	return parse_expression(input_lexer)
@@ -284,8 +322,10 @@ Read_Statement :: struct { identifiers: []string }
 Value_Type_Header :: struct { type: enum{ VARIABLE, CONSTANT } }
 Variable_Init_Statement :: struct { type: Token_Type, variables: []string }
 If_Statement :: struct { type: enum { IF, ELSE_IF, ELSE, END_IF }, condition_tokens: Lexer }
-While_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
+While_Statement :: struct { condition_tokens: Lexer }
 Do_Until_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
+For_Statement :: struct { id: string, from_value : Lexer, to_value : Lexer, step_value: Maybe(Lexer) }
+Loop_End_Statement :: struct { }
 
 Line :: union {
 	Expression,
@@ -297,6 +337,8 @@ Line :: union {
 	If_Statement,
 	While_Statement,
 	Do_Until_Statement,
+	For_Statement,
+	Loop_End_Statement,
 }
 
 Program :: [dynamic]Line
