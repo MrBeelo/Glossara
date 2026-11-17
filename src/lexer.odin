@@ -119,6 +119,10 @@ handle_symbols :: proc(tokens: ^[dynamic]Token) {
 		next = rune_at(current_pos + 1)
 		type = .COMPARATIVE_OPERATOR
 		if next != '=' do next = nil
+	case '.':
+		next = rune_at(current_pos + 1)
+		type = .RANGE
+		if next != '.' do error("Unexpected dot!")
 	case: error("Unknown symbol: %v", lookahead)
 	}
 
@@ -138,7 +142,13 @@ handle_numbers :: proc(tokens: ^[dynamic]Token) {
 
 		if r == '.' {
 			is_float = !is_float
-			if !is_float do error("Multiple dots!")
+			if rune_at(current_pos + 1) == '.' {
+				str := input[rune_pos(token_start_pos) : rune_pos(current_pos)]
+				append(tokens, Token{.NUMBER_LITERAL, str, token_start_pos})
+				lookahead = rune_at(current_pos)
+				handle_symbols(tokens)
+				return
+			} else if !is_float do error("Multiple dots!")
 		}
 	}
 	
@@ -182,6 +192,10 @@ handle_words :: proc(tokens: ^[dynamic]Token) {
 	case "ΑΠΟ": type = .FROM
 	case "ΜΕΧΡΙ": type = .TO
 	case "ΜΕ_ΒΗΜΑ": type = .WITH_STEP
+
+	case "ΕΠΙΛΕΞΕ": type = .SWITCH
+	case "ΠΕΡΙΠΤΩΣΗ": type = .CASE
+	case "ΤΕΛΟΣ_ΕΠΙΛΟΓΩΝ": type = .END_SWITCH
 		
 	case "DIV", "MOD": type = .NUMERICAL_OPERATOR
 		
@@ -308,6 +322,11 @@ Token_Type :: enum {
 	FROM,
 	TO,
 	WITH_STEP,
+
+	SWITCH,
+	CASE,
+	END_SWITCH,
+	RANGE,
 
 	// NOT DONE ZONE:
 	

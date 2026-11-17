@@ -47,6 +47,8 @@ interpret_line :: proc(line: Line, program: Program) {
 	case Do_Until_Statement: interpret_do_until_statement(x, program)
 	case For_Statement: interpret_for_statement(x, program)
 	case Loop_End_Statement: error("Unexpected loop finish statement!")
+	case Switch_Statement: error("Switch hasn't been added yet :(((")
+	case Switch_Case_Statement: error("Unexpected switch case statement!")
 	}
 }
 
@@ -221,7 +223,7 @@ interpret_constant_header :: proc(program: Program) {
 				error("Expected constant declaration!")
 			}
 		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement,
-			For_Statement, Loop_End_Statement: 
+			For_Statement, Loop_End_Statement, Switch_Statement, Switch_Case_Statement: 
 			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")
@@ -245,7 +247,7 @@ interpret_variable_header :: proc(program: Program) {
 		switch v in subline {
 		case Expression: error("Expected variable declaration, got expression!")
 		case Print_Statement, Read_Statement, If_Statement, While_Statement, Do_Until_Statement, 
-			For_Statement, Loop_End_Statement: 
+			For_Statement, Loop_End_Statement, Switch_Statement, Switch_Case_Statement: 
 			error("Expected some constant declaration, got %v!", v)
 		case Program_Statement:
 			if v.type != .START do error("Unexpected program statement!")

@@ -224,6 +224,19 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 		if !to_reached do error("Missing 'TO'!")
 		return For_Statement{ id.value, from_toks, to_toks, (step_toks if len(step_toks) != 0 else nil) }
+	case .SWITCH:
+		if len(lexer) == 1 do error("Expected identifier!")
+		if len(lexer) > 2 do error("Switch got too many arguments!")
+		if lexer[1].type != .IDENTIFIER do error("Expected identifier!")
+		return Switch_Statement{ .START, lexer[1].value }
+	case .CASE:
+		if len(lexer) == 1 do error("Expected value or range of values!")
+		toks := make(Lexer)
+		for i in 1..<len(lexer) do append(&toks, lexer[i])
+		return Switch_Case_Statement{ toks }
+	case .END_SWITCH: 
+		if len(lexer) > 1 do error("Switch end got too many arguments!")
+		return Switch_Statement{ .FINISH, "" }
 	}
 
 	return parse_expression(input_lexer)
@@ -331,6 +344,8 @@ If_Statement :: struct { type: enum { IF, ELSE_IF, ELSE, END_IF }, condition_tok
 While_Statement :: struct { condition_tokens: Lexer }
 Do_Until_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
 For_Statement :: struct { id: string, from_value : Lexer, to_value : Lexer, step_value: Maybe(Lexer) }
+Switch_Statement :: struct { type: enum { START, FINISH }, id: string }
+Switch_Case_Statement :: struct { tokens: Lexer }
 Loop_End_Statement :: struct { }
 
 Line :: union {
@@ -345,6 +360,8 @@ Line :: union {
 	Do_Until_Statement,
 	For_Statement,
 	Loop_End_Statement,
+	Switch_Statement,
+	Switch_Case_Statement,
 }
 
 Program :: [dynamic]Line
