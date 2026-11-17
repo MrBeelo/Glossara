@@ -54,7 +54,7 @@ interpret_line :: proc(line: Line, program: Program) {
 
 get_condition :: proc(lexer: Lexer) -> bool {
 	lexer := lexer
-	expr := parse_expression_copy(&lexer)
+	expr := parse_expression(&lexer)
 	value := evaluate_expression(expr)
 	
 	if type_of_dt(value) != bool do error("Expected logical expression!")
@@ -86,7 +86,7 @@ interpret_if_statement :: proc(stmt: If_Statement, program: Program) {
 			case .ELSE_IF:
 				if scope_level > 0 do continue
 				if in_zone do have_entered_zone = true
-				in_zone = false if in_zone else get_if_statement_condition(x)
+				in_zone = false if in_zone else !have_entered_zone && get_if_statement_condition(x)
 			case .ELSE:
 				if scope_level > 0 do continue
 				if in_zone do have_entered_zone = true
@@ -167,9 +167,9 @@ interpret_for_statement :: proc(stmt: For_Statement, program: Program) {
 	current_line += 1
 	starting_line := current_line
 
-	from_expr := parse_expression_copy(&stmt.from_value)
-	to_expr := parse_expression_copy(&stmt.to_value)
-	step_expr: Maybe(Expression) = nil if stmt.step_value == nil else parse_expression_copy(&stmt.step_value.?)
+	from_expr := parse_expression(&stmt.from_value)
+	to_expr := parse_expression(&stmt.to_value)
+	step_expr: Maybe(Expression) = nil if stmt.step_value == nil else parse_expression(&stmt.step_value.?)
 
 	from := evaluate_expression(from_expr)
 	to := evaluate_expression(to_expr)

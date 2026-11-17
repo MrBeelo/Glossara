@@ -17,15 +17,15 @@ token_start_pos: int
 lookahead: rune
 
 @(private)
-peek_lexer :: proc(lexer: ^Lexer) -> Token {
-	token := lexer[len(lexer) - 1] 
+peek_lexer :: proc(lexer: ^Lexer, offset: ^int) -> Token {
+	token := lexer[0 + offset^] 
 	return token
 }
 
 @(private)
-advance_lexer :: proc(lexer: ^Lexer) -> Token {
-	token := peek_lexer(lexer)
-	pop(lexer)
+advance_lexer :: proc(lexer: ^Lexer, offset: ^int) -> Token {
+	token := peek_lexer(lexer, offset)
+	offset^ += 1
 	return token
 }
 
@@ -285,8 +285,6 @@ Token_Type :: enum {
 	QUOTE,
 	PARENTHESIS_OPEN,
 	PARENTHESIS_CLOSE,
-
-	EOL,
 
 	PROGRAM,
 	BEGIN_PROGRAM,

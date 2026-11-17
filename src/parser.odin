@@ -4,24 +4,26 @@ import "core:unicode"
 import "core:fmt"
 
 parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression {
-	// Fix to fit to the form <EOL> <reversed lexer>
-	if lexer[0].type != .EOL {
-		append(lexer, Token{.EOL, "<EOL>", 999})
-		reverse(lexer)
-	}
+	expr, _ := __parse_expression(lexer, min_bind_power, 0)
+	return expr
+}
+
+__parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset := 0) -> (Expression, int) {
+	offset := lexer_offset
 	
 	left_hand_side: Expression
 	{
-		token := advance_lexer(lexer)
+		token := advance_lexer(lexer, &offset)
 		#partial switch token.type {
 		case .IDENTIFIER, .NUMBER_LITERAL, .BOOL_LITERAL, .STRING_LITERAL: left_hand_side = Atom(token.value)
 		case .PARENTHESIS_OPEN:
-			left_hand_side = parse_expression(lexer, 0)
-			next := advance_lexer(lexer)
+			left_hand_side, offset = __parse_expression(lexer, 0, offset)
+			next := advance_lexer(lexer, &offset)
 			if next.type != .PARENTHESIS_CLOSE do error("No closing parenthesis found!")
 		case .NOT, .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR:
 			if token.value != "ΟΧΙ" && token.value != "-" && token.value != "+" do error("Cannot perform unary operation with operator: '%s'", token.value)
-			rhs := parse_expression(lexer, 100)	
+			rhs: Expression
+			rhs, offset = __parse_expression(lexer, 100, offset)	
             operation := new(Unary_Operation)
             operation^ = Unary_Operation{token.value, rhs}
             left_hand_side = operation
@@ -29,12 +31,12 @@ parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression 
 		}
 	}
 
-	loop: for true {
+	loop: for offset < len(lexer) {		
 		operator: string
 		{
-			token := peek_lexer(lexer)
+			token := peek_lexer(lexer, &offset)
 			#partial switch token.type {
-			case .EOL, .PARENTHESIS_CLOSE: break loop
+			case .PARENTHESIS_CLOSE: break loop
 			case .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR, .ASSIGN: operator = token.value
 			case: error("Bad token! (operator stage), got \"%v\"", token)
 			}
@@ -43,24 +45,17 @@ parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression 
 		left_bind_power, right_bind_power := binding_power(operator)
 		if left_bind_power < min_bind_power do break loop
 
-		advance_lexer(lexer)
+		advance_lexer(lexer, &offset)
 	
 		right_hand_side: Expression
-		right_hand_side = parse_expression(lexer, right_bind_power)
+		right_hand_side, offset = __parse_expression(lexer, right_bind_power, offset)
 
 		operation := new(Binary_Operation)
 		operation^ = Binary_Operation{operator, left_hand_side, right_hand_side}
 		left_hand_side = operation
 	}
 	
-	return left_hand_side
-}
-
-parse_expression_copy :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression {
-	new_lexer := make(Lexer)
-	defer delete(new_lexer)
-	for token in lexer do append(&new_lexer, token)
-	return parse_expression(&new_lexer, min_bind_power)
+	return left_hand_side, offset
 }
 
 @(private = "file")
@@ -239,7 +234,8 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 		return Switch_Statement{ .FINISH, "" }
 	}
 
-	return parse_expression(input_lexer)
+	expr := parse_expression(input_lexer)
+	return expr
 }
 
 parse_program :: proc(lexer: Lexer) -> Program {

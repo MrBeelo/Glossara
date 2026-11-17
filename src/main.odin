@@ -15,7 +15,6 @@ main :: proc() {
 	values = make(map[string]Value)
 	
 	lexer := new_lexer(str)
-	
 	program := parse_program(lexer)	
 	run_program(program)
 }
