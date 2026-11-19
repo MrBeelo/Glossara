@@ -8,6 +8,14 @@ parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1) -> Expression 
 	return expr
 }
 
+parse_expression_single :: proc(token: Token, min_bind_power: f64 = -1) -> Expression {
+	temp := make(Lexer)
+	defer delete(temp)
+	append(&temp, token)
+	expr, _ := __parse_expression(&temp, min_bind_power, 0)
+	return expr
+}
+
 __parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset := 0) -> (Expression, int) {
 	offset := lexer_offset
 	
@@ -56,14 +64,6 @@ __parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset
 	}
 	
 	return left_hand_side, offset
-}
-
-@(private = "file")
-append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
-	if len(current_line) == 0 do return
-	line_tokens := make([dynamic]Token)
-    append(&line_tokens, ..current_line[:])
-	append(lines, line_tokens)
 }
 
 parse_line :: proc(input_lexer: ^Lexer) -> Line {
@@ -226,9 +226,23 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 		return Switch_Statement{ .START, lexer[1].value }
 	case .CASE:
 		if len(lexer) == 1 do error("Expected value or range of values!")
-		toks := make(Lexer)
-		for i in 1..<len(lexer) do append(&toks, lexer[i])
-		return Switch_Case_Statement{ toks }
+
+		subvalues := make([dynamic]Lexer)
+		current_subvalue := make(Lexer)
+		
+		for i in 1..<len(lexer) {
+			if lexer[i].type != .COLON { append(&current_subvalue, lexer[i]); continue }
+
+			subv := make(Lexer)
+			for tok in current_subvalue do append(&subv, tok)
+			
+			append(&subvalues, subv)
+			clear(&current_subvalue)
+		}
+
+		append(&subvalues, current_subvalue)
+		
+		return Switch_Case_Statement{ subvalues[:] }
 	case .END_SWITCH: 
 		if len(lexer) > 1 do error("Switch end got too many arguments!")
 		return Switch_Statement{ .FINISH, "" }
@@ -236,6 +250,14 @@ parse_line :: proc(input_lexer: ^Lexer) -> Line {
 
 	expr := parse_expression(input_lexer)
 	return expr
+}
+
+@(private = "file")
+append_line :: proc(lines: ^[dynamic]Lexer, current_line: ^Lexer) {
+	if len(current_line) == 0 do return
+	line_tokens := make([dynamic]Token)
+    append(&line_tokens, ..current_line[:])
+	append(lines, line_tokens)
 }
 
 parse_program :: proc(lexer: Lexer) -> Program {
@@ -341,7 +363,7 @@ While_Statement :: struct { condition_tokens: Lexer }
 Do_Until_Statement :: struct { type: enum { START, FINISH }, condition_tokens: Lexer }
 For_Statement :: struct { id: string, from_value : Lexer, to_value : Lexer, step_value: Maybe(Lexer) }
 Switch_Statement :: struct { type: enum { START, FINISH }, id: string }
-Switch_Case_Statement :: struct { tokens: Lexer }
+Switch_Case_Statement :: struct { values: []Lexer }
 Loop_End_Statement :: struct { }
 
 Line :: union {

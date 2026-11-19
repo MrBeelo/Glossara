@@ -47,7 +47,7 @@ interpret_line :: proc(line: Line, program: Program) {
 	case Do_Until_Statement: interpret_do_until_statement(x, program)
 	case For_Statement: interpret_for_statement(x, program)
 	case Loop_End_Statement: error("Unexpected loop finish statement!")
-	case Switch_Statement: error("Switch hasn't been added yet :(((")
+	case Switch_Statement: interpret_switch_statement(x, program)
 	case Switch_Case_Statement: error("Unexpected switch case statement!")
 	}
 }
@@ -209,6 +209,32 @@ interpret_for_statement :: proc(stmt: For_Statement, program: Program) {
 	}
 }
 
+interpret_switch_statement :: proc(stmt: Switch_Statement, program: Program) {
+	if stmt.type != .START do error("Unexpected switch end statement!")
+	current_line += 1
+	in_scope: bool
+	have_entered_scope: bool
+	for ; current_line < len(program); current_line += 1 {
+		subline := program[current_line]
+		#partial switch v in subline {
+		case Switch_Statement:
+			if v.type == .START do interpret_switch_statement(v, program)
+			if v.type == .FINISH do return
+		case Switch_Case_Statement:
+			in_scope = interpret_switch_case(stmt.id, v)
+			if have_entered_scope {
+				if in_scope do in_scope = false
+			} else {
+				if in_scope do have_entered_scope = true
+			}
+		case:
+			if in_scope do interpret_line(subline, program)
+		}
+	}
+
+	error("Program finished without switch statement closing!")
+}
+
 interpret_constant_header :: proc(program: Program) {
 	current_line += 1
 	assignments := 0
@@ -270,6 +296,62 @@ interpret_variable_header :: proc(program: Program) {
 		}
 	}
 	current_line -= 1
+}
+
+interpret_switch_case :: proc(id: string, stmt: Switch_Case_Statement) -> bool {
+	value, ok := get_value(id)
+	if !ok do error("Unknown value: '%s'!", value.type)
+	if !value.initialized do error("Uninitialized value of type: '%s'!", type_of_dt(value.type))
+	stmt := stmt
+
+	for &tokens in stmt.values {
+		if len(tokens) == 1 && tokens[0].type == .ELSE do return true
+		
+		switch v in value.type {
+		case bool:
+			if len(tokens) != 1 do error("Expected bool literal!")
+			if v && tokens[0].type == .BOOL_LITERAL && tokens[0].value == "ΑΛΗΘΗΣ" do return true
+			if !v && tokens[0].type == .BOOL_LITERAL && tokens[0].value == "ΨΕΥΔΗΣ" do return true
+		case string:
+			if len(tokens) != 1 do error("Expected string literal!")
+			if v == tokens[0].value do return true
+		case int, f64:
+			valid_argument: bool
+			
+			if len(tokens) == 1 {
+				valid_argument = true
+				val := evaluate_expression(parse_expression(&tokens))
+				if dt_equal(value.type, val) do return true
+			}
+			
+			if len(tokens) == 2 && tokens[0].type == .COMPARATIVE_OPERATOR {
+				valid_argument = true
+				val := evaluate_expression(parse_expression_single(tokens[1]))
+				
+				switch tokens[0].value {
+				case ">", ">=", "<", "<=": 
+					if comparative_operation(value.type, val, ">").(bool) do return true
+				case: error("Unexpected operator in switch case statement: '%s'!", tokens[0].value)
+				}
+			}
+
+			if len(tokens) == 3 && tokens[1].type == .RANGE {
+				valid_argument = true
+				val1 := evaluate_expression(parse_expression_single(tokens[0]))
+				val2 := evaluate_expression(parse_expression_single(tokens[2]))
+				if comparative_operation(val1, val2, ">=").(bool) do error("Left side of range is bigger or equal to right side!")
+				
+				in_range := true
+				if comparative_operation(value.type, val1, "<").(bool) do in_range = false
+				if comparative_operation(value.type, val2, ">").(bool) do in_range = false
+				if in_range do return true
+			}
+
+			if !valid_argument do error("Invalid argument for number case!")
+		}
+	}
+
+	return false
 }
 
 assign_value :: proc(id: string, value: Data_Type) {
