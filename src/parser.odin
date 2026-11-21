@@ -16,6 +16,40 @@ parse_expression_single :: proc(token: Token, min_bind_power: f64 = -1) -> Expre
 	return expr
 }
 
+parse_arguments :: proc(lexer: ^Lexer, lexer_offset: int) -> ([dynamic]Expression, int) {
+	offset := lexer_offset
+	args := make([dynamic]Expression)
+	current_expr_toks := make(Lexer)
+	paren_scope_level: int
+	
+	advance_lexer(lexer, &offset)
+	
+	loop: for offset < len(lexer) {
+		token := advance_lexer(lexer, &offset)
+		if token.type != .COMMA do append(&current_expr_toks, token)
+		
+		#partial switch token.type {
+		case .PARENTHESIS_CLOSE: 
+			if paren_scope_level == 0 do break loop
+			paren_scope_level -= 1
+		case .PARENTHESIS_OPEN:
+			paren_scope_level += 1
+		case .COMMA:
+			if paren_scope_level == 0 {
+				expr := parse_expression(&current_expr_toks)
+				append(&args, expr)
+				clear(&current_expr_toks)
+			}
+		}
+	}
+
+	expr := parse_expression(&current_expr_toks)
+	append(&args, expr)
+	delete(current_expr_toks)
+
+	return args, offset
+}
+
 __parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset := 0) -> (Expression, int) {
 	offset := lexer_offset
 	
@@ -46,6 +80,18 @@ __parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset
 			#partial switch token.type {
 			case .PARENTHESIS_CLOSE: break loop
 			case .NUMERICAL_OPERATOR, .LOGICAL_OPERATOR, .COMPARATIVE_OPERATOR, .ASSIGN: operator = token.value
+			case .PARENTHESIS_OPEN:
+				is_atom: bool
+				#partial switch v in left_hand_side { case Atom: is_atom = true }
+				if !is_atom do error("Function call with operation!")
+				name := string(left_hand_side.(Atom))
+				if !is_builtin_function_name(name) do error("Unknown function '%s'!", name)
+				args: [dynamic]Expression
+				args, offset = parse_arguments(lexer, offset)
+				call := new(Function_Call)
+				call^ = Function_Call{name, args}
+				left_hand_side = call
+				continue
 			case: error("Bad token! (operator stage), got \"%v\"", token)
 			}
 		}
@@ -64,6 +110,21 @@ __parse_expression :: proc(lexer: ^Lexer, min_bind_power: f64 = -1, lexer_offset
 	}
 	
 	return left_hand_side, offset
+}
+
+is_builtin_function_name :: proc(s: string) -> bool {
+	return (
+		s == "Α_Μ" || 
+		s == "Α_Τ" ||
+		s == "Ε" ||
+		s == "ΕΦ" ||
+		s == "ΗΜ" ||
+		s == "ΛΟΓ" ||
+		s == "ΛΟΓ2" ||
+		s == "ΛΟΓ10" ||
+		s == "ΣΥΝ" ||
+		s == "Τ_Ρ"
+	)
 }
 
 parse_line :: proc(input_lexer: ^Lexer) -> Line {
@@ -293,7 +354,7 @@ parse_program :: proc(lexer: Lexer) -> Program {
 
 is_assignment_expr :: proc(expr: Expression, symbol_overload := "<-") -> Maybe( struct{str: string, exp: ^Expression} ) {
 	switch v in expr {
-	case Atom, ^Unary_Operation: return nil
+	case Atom, ^Unary_Operation, ^Function_Call: return nil
 	case ^Binary_Operation:
 		if expr.(^Binary_Operation).operator == symbol_overload {
 			name := cast(string)expr.(^Binary_Operation).left.(Atom)
@@ -347,10 +408,16 @@ Unary_Operation :: struct {
 	value: Expression,
 }
 
+Function_Call :: struct {
+	name: string,
+	args: [dynamic]Expression,
+}
+
 Expression :: union {
 	Atom,
 	^Unary_Operation,
 	^Binary_Operation,
+	^Function_Call,
 }
 
 Program_Statement :: struct { type: enum { DECLARATION, START, FINISH }, value: string }

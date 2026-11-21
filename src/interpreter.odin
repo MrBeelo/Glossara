@@ -498,6 +498,30 @@ evaluate_expression :: proc(expr: Expression) -> Data_Type {
 		case "<", "<=", ">", ">=", "=", "<>": return comparative_operation(lhs, rhs, v.operator)
 		case: error("Bad operator: %s", v.operator)
 		}
+	case ^Function_Call:
+		// NOTE: This is currently designed only for builtin functions!
+		
+		if len(v.args) != 1 do error("Function got incorrect number of arguments!")
+		value := evaluate_expression(v.args[0])
+		if type_of_dt(value) != f64 && type_of_dt(value) != int do func_error(v.name, value)
+		fval: f64
+		if type_of_dt(value) == int do fval = f64(value.(int))
+		if type_of_dt(value) == f64 do fval = value.(f64)
+
+		switch v.name {
+		case "Α_Μ": return int(math.floor(fval))
+		case "Α_Τ":
+			if type_of_dt(value) == int do return math.abs(value.(int))
+			if type_of_dt(value) == f64 do return math.abs(value.(f64))
+		case "Ε": return numeric_operation(f64(math.E), fval, "^")
+		case "ΗΜ": return math.sin(fval * 180 / math.PI)
+		case "ΣΥΝ": return math.cos(fval * 180 / math.PI)
+		case "ΕΦ": return math.tan(fval * 180 / math.PI)
+		case "ΛΟΓ": return math.log(fval, math.E)
+		case "ΛΟΓ2": return math.log(fval, 2)
+		case "ΛΟΓ10": return math.log(fval, 10)
+		case "Τ_Ρ": return numeric_operation(fval, f64(0.5), "^")
+		}
 	}
 	unreachable()
 }
@@ -613,6 +637,10 @@ logical_operation :: proc(lhs, rhs: Data_Type, op: string) -> Data_Type {
 	}
 
 	unreachable()
+}
+
+func_error :: proc(name: string, value: Data_Type) -> ! {
+	error("Cannot call function '%s' with value '%v' of type '%v'!", name, value, type_of_dt(value))
 }
 
 error :: proc(message: string, args: ..any) -> ! {
